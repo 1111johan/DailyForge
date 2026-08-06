@@ -1,0 +1,169 @@
+import { getConfigurationStatus, getGenerationConfig } from "@/lib/config/env";
+import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { dateInTimeZone } from "@/lib/workflow/create-job";
+import { progressForJob } from "@/lib/workflow/state-machine";
+import type {
+  ContentJob,
+  ContentTopic,
+  GeneratedAsset,
+  GeneratedPost,
+  Product,
+} from "@/lib/types/domain";
+import { WorkflowError } from "@/lib/workflow/errors";
+
+export interface DashboardJob {
+  id: string;
+  jobDate: string;
+  productName: string;
+  level: "cet4" | "cet6";
+  topic: string;
+  title: string | null;
+  status: ContentJob["status"];
+  stage: ContentJob["stage"];
+  attempts: number;
+  progress: number;
+  readyAssets: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  updatedAt: string;
+}
+
+export interface DashboardSnapshot {
+  generatedAt: string;
+  today: string;
+  summary: {
+    total: number;
+    completed: number;
+    active: number;
+    failed: number;
+  };
+  products: Array<{
+    id: string;
+    name: string;
+    level: "cet4" | "cet6";
+  }>;
+  jobs: DashboardJob[];
+}
+
+export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
+  const configuration = getConfigurationStatus();
+  if (!configuration.supabase) {
+    throw new WorkflowError(
+      "Supabase is not configured",
+      "SUPABASE_NOT_CONFIGURED",
+      false,
+    );
+  }
+  const supabase = createSupabaseAdmin();
+  const timezone = getGenerationConfig().timezone;
+  const today = dateInTimeZone(new Date(), timezone);
+  const [productsResult, jobsResult] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*")
+      .order("created_at"),
+    supabase
+      .from("content_jobs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ]);
+  if (productsResult.error || jobsResult.error) {
+    throw new WorkflowError(
+      `Failed to load dashboard: ${productsResult.error?.message || jobsResult.error?.message}`,
+      "DASHBOARD_QUERY_FAILED",
+      true,
+    );
+  }
+
+  const products = (productsResult.data || []) as Product[];
+  const jobs = (jobsResult.data || []) as ContentJob[];
+  const postResult = jobs.length
+    ? await supabase
+        .from("generated_posts")
+        .select("*")
+        .in("job_id", jobs.map((job) => job.id))
+    : { data: [], error: null };
+  if (postResult.error) {
+    throw new WorkflowError(
+      `Failed to load dashboard posts: ${postResult.error.message}`,
+      "DASHBOARD_POST_QUERY_FAILED",
+      true,
+    );
+  }
+  const posts = (postResult.data || []) as GeneratedPost[];
+  const postIds = posts.map((post) => post.id);
+  const [assetsResult, topicsResult] = await Promise.all([
+    postIds.length
+      ? supabase.from("generated_assets").select("*").in("post_id", postIds)
+      : Promise.resolve({ data: [], error: null }),
+    jobs.some((job) => job.topic_id)
+      ? supabase
+          .from("content_topics")
+          .select("*")
+          .in(
+            "id",
+            jobs.flatMap((job) => (job.topic_id ? [job.topic_id] : [])),
+          )
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (assetsResult.error || topicsResult.error) {
+    throw new WorkflowError(
+      `Failed to load dashboard relations: ${assetsResult.error?.message || topicsResult.error?.message}`,
+      "DASHBOARD_RELATION_QUERY_FAILED",
+      true,
+    );
+  }
+
+  const assets = (assetsResult.data || []) as GeneratedAsset[];
+  const topics = (topicsResult.data || []) as ContentTopic[];
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const postMap = new Map(posts.map((post) => [post.job_id, post]));
+  const topicMap = new Map(topics.map((topic) => [topic.id, topic]));
+
+  const dashboardJobs: DashboardJob[] = jobs.map((job) => {
+    const product = productMap.get(job.product_id);
+    const post = postMap.get(job.id);
+    return {
+      id: job.id,
+      jobDate: job.job_date,
+      productName: product?.name || "已删除的产品",
+      level: product?.level || "cet4",
+      topic: (job.topic_id && topicMap.get(job.topic_id)?.topic) || post?.topic || "未选择",
+      title: post?.selected_title || null,
+      status: job.status,
+      stage: job.stage,
+      attempts: job.attempts,
+      progress: progressForJob(job),
+      readyAssets: post
+        ? assets.filter((asset) => asset.post_id === post.id && asset.status === "ready")
+            .length
+        : 0,
+      errorCode: job.error_code,
+      errorMessage: job.error_message,
+      updatedAt: job.updated_at,
+    };
+  });
+  const todayJobs = dashboardJobs.filter((job) => job.jobDate === today);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    today,
+    summary: {
+      total: todayJobs.length,
+      completed: todayJobs.filter((job) => job.status === "completed").length,
+      active: todayJobs.filter((job) =>
+        ["queued", "running", "retry"].includes(job.status),
+      ).length,
+      failed: todayJobs.filter((job) => job.status === "failed").length,
+    },
+    products: products
+      .filter((product) => product.is_active)
+      .map((product) => ({
+        id: product.id,
+        name: product.name,
+        level: product.level,
+      })),
+    jobs: dashboardJobs,
+  };
+}
