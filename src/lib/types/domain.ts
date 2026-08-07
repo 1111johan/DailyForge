@@ -1,4 +1,5 @@
 export type ProductLevel = "cet4" | "cet6";
+export type ProductMode = "rotate" | ProductLevel;
 export type JobStatus =
   | "queued"
   | "running"
@@ -60,6 +61,41 @@ export interface ContentJob {
   error_message: string | null;
   started_at: string | null;
   finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+  batch_id: string | null;
+  sequence_no: number | null;
+  start_delay_seconds: number;
+}
+
+export interface GenerationSchedule {
+  id: string;
+  name: string;
+  run_time: string;
+  weekdays: number[];
+  post_count: number;
+  product_mode: ProductMode;
+  is_enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenerationBatch {
+  id: string;
+  source: "manual" | "schedule";
+  schedule_id: string | null;
+  product_id: string | null;
+  scheduled_for: string | null;
+  idempotency_key: string;
+  requested_count: number;
+  created_count: number;
+  product_mode: ProductMode;
+  prompt_snapshot: Record<string, unknown>;
+  status: "pending" | "populated" | "failed";
+  attempts: number;
+  error_message: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -31,6 +31,8 @@ export async function claimJob(workerId: string): Promise<ContentJob | null> {
   const supabase = createSupabaseAdmin();
   const { data, error } = await supabase.rpc("claim_content_job", {
     p_worker_id: workerId,
+    p_stale_after: "00:06:00",
+    p_image_concurrency: 2,
   });
   if (error) throw databaseError("Failed to claim job", error);
   const rows = (data || []) as ContentJob[];

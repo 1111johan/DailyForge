@@ -3,9 +3,11 @@
 import {
   AlertCircle,
   ArrowRight,
+  CalendarClock,
   Check,
   CircleDashed,
   Cloud,
+  Clock3,
   FileText,
   Image as ImageIcon,
   LoaderCircle,
@@ -18,8 +20,10 @@ import {
   Rows3,
   Save,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -56,6 +60,42 @@ interface ApiEnvelope<T = unknown> {
 }
 
 const EMPTY_PROMPTS: PromptSettings = { copyPrompt: "", imagePrompt: "" };
+
+type DashboardSchedule = DashboardSnapshot["schedules"][number];
+
+interface ScheduleDraft {
+  name: string;
+  runTime: string;
+  weekdays: number[];
+  postCount: number;
+  productMode: "rotate" | "cet4" | "cet6";
+  isEnabled: boolean;
+}
+
+const DEFAULT_SCHEDULE_DRAFT: ScheduleDraft = {
+  name: "每日内容",
+  runTime: "08:00",
+  weekdays: [1, 2, 3, 4, 5, 6, 7],
+  postCount: 3,
+  productMode: "rotate",
+  isEnabled: true,
+};
+
+const WEEKDAYS = [
+  [1, "一"],
+  [2, "二"],
+  [3, "三"],
+  [4, "四"],
+  [5, "五"],
+  [6, "六"],
+  [7, "日"],
+] as const;
+
+const PRODUCT_MODE_LABELS = {
+  rotate: "四级 / 六级轮换",
+  cet4: "只生成四级",
+  cet6: "只生成六级",
+} as const;
 
 const PIPELINE = [
   { key: "generate_copy", label: "文案", icon: FileText },
@@ -106,6 +146,27 @@ function formatClock(value: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function formatNextRun(value: string | null) {
+  if (!value) return "未安排";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function weekdaySummary(days: number[]) {
+  if (days.length === 7) return "每天";
+  if (days.length === 5 && days.every((day, index) => day === index + 1)) {
+    return "工作日";
+  }
+  return days.map((day) => `周${WEEKDAYS.find(([value]) => value === day)?.[1]}`).join(" ");
 }
 
 function normalizedStage(stage: string) {
@@ -198,6 +259,246 @@ function SummaryBand({ snapshot }: { snapshot: DashboardSnapshot }) {
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+function SchedulePanel({
+  snapshot,
+  draft,
+  editorOpen,
+  editingId,
+  pending,
+  onDraftChange,
+  onNew,
+  onEdit,
+  onCancel,
+  onSave,
+  onToggle,
+  onDelete,
+}: {
+  snapshot: DashboardSnapshot;
+  draft: ScheduleDraft;
+  editorOpen: boolean;
+  editingId: string | null;
+  pending: boolean;
+  onDraftChange: (draft: ScheduleDraft) => void;
+  onNew: () => void;
+  onEdit: (schedule: DashboardSchedule) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  onToggle: (schedule: DashboardSchedule) => void;
+  onDelete: (schedule: DashboardSchedule) => void;
+}) {
+  const nextTime = snapshot.automation.nextRunAt;
+  return (
+    <section className="schedule-panel" aria-labelledby="schedule-heading">
+      <div className="schedule-overview">
+        <div className="schedule-title-row">
+          <div className="schedule-icon"><CalendarClock aria-hidden="true" /></div>
+          <div>
+            <p>自动计划</p>
+            <h2 id="schedule-heading">定时生成</h2>
+          </div>
+        </div>
+        <div className="next-run-block">
+          <span>下一次运行</span>
+          <strong>{formatNextRun(nextTime)}</strong>
+          <small>
+            {snapshot.automation.enabledCount} 个计划启用 · 图片并发 {snapshot.automation.imageConcurrency}
+          </small>
+        </div>
+        <button
+          className="primary-button"
+          type="button"
+          disabled={pending || editorOpen}
+          onClick={onNew}
+        >
+          <Plus aria-hidden="true" />添加计划
+        </button>
+      </div>
+
+      <div className="schedule-workspace">
+        <div className="schedule-list">
+          {snapshot.schedules.length === 0 ? (
+            <div className="schedule-empty">
+              <Clock3 aria-hidden="true" />
+              <strong>还没有自动计划</strong>
+            </div>
+          ) : snapshot.schedules.map((schedule) => (
+            <article
+              className={`schedule-row${schedule.isEnabled ? " is-enabled" : ""}`}
+              key={schedule.id}
+            >
+              <label className="schedule-switch">
+                <input
+                  type="checkbox"
+                  checked={schedule.isEnabled}
+                  disabled={pending}
+                  aria-label={`${schedule.isEnabled ? "停用" : "启用"}${schedule.name}`}
+                  onChange={() => onToggle(schedule)}
+                />
+                <span aria-hidden="true" />
+              </label>
+              <div className="schedule-name">
+                <strong>{schedule.name}</strong>
+                <span>{weekdaySummary(schedule.weekdays)}</span>
+              </div>
+              <div className="schedule-time">
+                <Clock3 aria-hidden="true" />
+                <strong>{schedule.runTime}</strong>
+              </div>
+              <div className="schedule-meta">
+                <span>{schedule.postCount} 条</span>
+                <span>{PRODUCT_MODE_LABELS[schedule.productMode]}</span>
+              </div>
+              <div className="schedule-next">
+                <span>下次</span>
+                <strong>{formatNextRun(schedule.nextRunAt)}</strong>
+              </div>
+              <div className="schedule-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  title="修改计划"
+                  aria-label={`修改${schedule.name}`}
+                  disabled={pending}
+                  onClick={() => onEdit(schedule)}
+                >
+                  <Settings2 aria-hidden="true" />
+                </button>
+                <button
+                  className="icon-button danger-button"
+                  type="button"
+                  title="删除计划"
+                  aria-label={`删除${schedule.name}`}
+                  disabled={pending}
+                  onClick={() => onDelete(schedule)}
+                >
+                  <Trash2 aria-hidden="true" />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {editorOpen ? (
+          <div className="schedule-editor" aria-label={editingId ? "修改计划" : "添加计划"}>
+            <div className="schedule-editor-heading">
+              <div>
+                <span>{editingId ? "修改计划" : "新计划"}</span>
+                <strong>{editingId ? draft.name : "设置自动运行"}</strong>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                title="关闭"
+                aria-label="关闭计划编辑"
+                disabled={pending}
+                onClick={onCancel}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="schedule-form-grid">
+              <label className="schedule-field schedule-field-name">
+                <span>计划名称</span>
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={draft.name}
+                  onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}
+                />
+              </label>
+              <label className="schedule-field">
+                <span>北京时间</span>
+                <input
+                  type="time"
+                  value={draft.runTime}
+                  onChange={(event) => onDraftChange({ ...draft, runTime: event.target.value })}
+                />
+              </label>
+              <label className="schedule-field">
+                <span>每次生成</span>
+                <div className="number-input">
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={draft.postCount}
+                    onChange={(event) => onDraftChange({
+                      ...draft,
+                      postCount: Math.max(1, Math.min(20, Number(event.target.value) || 1)),
+                    })}
+                  />
+                  <span>条</span>
+                </div>
+              </label>
+              <label className="schedule-field">
+                <span>内容范围</span>
+                <select
+                  value={draft.productMode}
+                  onChange={(event) => onDraftChange({
+                    ...draft,
+                    productMode: event.target.value as ScheduleDraft["productMode"],
+                  })}
+                >
+                  <option value="rotate">四级 / 六级轮换</option>
+                  <option value="cet4">只生成四级</option>
+                  <option value="cet6">只生成六级</option>
+                </select>
+              </label>
+              <fieldset className="schedule-days">
+                <legend>运行日期</legend>
+                <div>
+                  {WEEKDAYS.map(([day, label]) => {
+                    const selected = draft.weekdays.includes(day);
+                    return (
+                      <button
+                        className={selected ? "is-selected" : ""}
+                        type="button"
+                        aria-pressed={selected}
+                        key={day}
+                        onClick={() => {
+                          const weekdays = selected
+                            ? draft.weekdays.filter((value) => value !== day)
+                            : [...draft.weekdays, day].toSorted((a, b) => a - b);
+                          if (weekdays.length > 0) onDraftChange({ ...draft, weekdays });
+                        }}
+                      >
+                        周{label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </div>
+            <div className="schedule-editor-footer">
+              <label className="enabled-setting">
+                <input
+                  type="checkbox"
+                  checked={draft.isEnabled}
+                  onChange={(event) => onDraftChange({ ...draft, isEnabled: event.target.checked })}
+                />
+                <span>保存后启用</span>
+              </label>
+              <div>
+                <button className="secondary-button" type="button" disabled={pending} onClick={onCancel}>
+                  取消
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={pending || !draft.name.trim() || draft.weekdays.length === 0}
+                  onClick={onSave}
+                >
+                  <Save aria-hidden="true" />保存计划
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -471,8 +772,14 @@ export function Dashboard() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("rotate");
+  const [manualCount, setManualCount] = useState(1);
   const [selectedJobId, setSelectedJobId] = useState("");
+  const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft>(
+    DEFAULT_SCHEDULE_DRAFT,
+  );
+  const [scheduleEditorOpen, setScheduleEditorOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [savedPrompts, setSavedPrompts] = useState<PromptSettings>(EMPTY_PROMPTS);
   const [draftPrompts, setDraftPrompts] = useState<PromptSettings>(EMPTY_PROMPTS);
   const [promptsReady, setPromptsReady] = useState(false);
@@ -509,7 +816,7 @@ export function Dashboard() {
 
   const applySnapshot = useCallback((nextSnapshot: DashboardSnapshot) => {
     setSnapshot(nextSnapshot);
-    setSelectedProduct((current) => current || nextSnapshot.products[0]?.id || "");
+    setSelectedProduct((current) => current || "rotate");
     setSelectedJobId((current) => {
       if (nextSnapshot.jobs.some((job) => job.id === current)) return current;
       return nextSnapshot.jobs.find((job) => job.title)?.id || nextSnapshot.jobs[0]?.id || "";
@@ -541,6 +848,8 @@ export function Dashboard() {
           }).format(now),
           summary: { total: 0, completed: 0, active: 0, failed: 0 },
           products: [],
+          automation: { enabledCount: 0, nextRunAt: null, imageConcurrency: 2 },
+          schedules: [],
           jobs: [],
         });
       })
@@ -601,6 +910,31 @@ export function Dashboard() {
     }
   }
 
+  function openNewSchedule() {
+    setEditingScheduleId(null);
+    setScheduleDraft(DEFAULT_SCHEDULE_DRAFT);
+    setScheduleEditorOpen(true);
+  }
+
+  function openSchedule(schedule: DashboardSchedule) {
+    setEditingScheduleId(schedule.id);
+    setScheduleDraft({
+      name: schedule.name,
+      runTime: schedule.runTime,
+      weekdays: schedule.weekdays,
+      postCount: schedule.postCount,
+      productMode: schedule.productMode,
+      isEnabled: schedule.isEnabled,
+    });
+    setScheduleEditorOpen(true);
+  }
+
+  function closeScheduleEditor() {
+    setEditingScheduleId(null);
+    setScheduleDraft(DEFAULT_SCHEDULE_DRAFT);
+    setScheduleEditorOpen(false);
+  }
+
   const primaryJob = useMemo(() => {
     if (!snapshot) return null;
     return (
@@ -656,6 +990,47 @@ export function Dashboard() {
       <ConnectionStrip health={health} />
       <SummaryBand snapshot={snapshot} />
 
+      <SchedulePanel
+        snapshot={snapshot}
+        draft={scheduleDraft}
+        editorOpen={scheduleEditorOpen}
+        editingId={editingScheduleId}
+        pending={isPending}
+        onDraftChange={setScheduleDraft}
+        onNew={openNewSchedule}
+        onEdit={openSchedule}
+        onCancel={closeScheduleEditor}
+        onSave={() => runAction(async () => {
+          await apiFetch(
+            editingScheduleId
+              ? `/api/schedules/${editingScheduleId}`
+              : "/api/schedules",
+            {
+              method: editingScheduleId ? "PATCH" : "POST",
+              body: JSON.stringify(scheduleDraft),
+            },
+          );
+          const message = editingScheduleId ? "计划已更新" : "计划已添加";
+          closeScheduleEditor();
+          return message;
+        })}
+        onToggle={(schedule) => runAction(async () => {
+          await apiFetch(`/api/schedules/${schedule.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ isEnabled: !schedule.isEnabled }),
+          });
+          return schedule.isEnabled ? "计划已停用" : "计划已启用";
+        })}
+        onDelete={(schedule) => {
+          if (!window.confirm(`删除“${schedule.name}”？已生成的内容不会被删除。`)) return;
+          runAction(async () => {
+            await apiFetch(`/api/schedules/${schedule.id}`, { method: "DELETE" });
+            if (editingScheduleId === schedule.id) closeScheduleEditor();
+            return "计划已删除";
+          });
+        }}
+      />
+
       <PromptComposer
         prompts={draftPrompts}
         ready={promptsReady}
@@ -686,6 +1061,7 @@ export function Dashboard() {
               value={selectedProduct}
               onChange={(event) => setSelectedProduct(event.target.value)}
             >
+              <option value="rotate">四级 / 六级轮换</option>
               {snapshot.products.length === 0 ? (
                 <option value="">暂无启用产品</option>
               ) : null}
@@ -693,6 +1069,19 @@ export function Dashboard() {
                 <option value={product.id} key={product.id}>{product.name}</option>
               ))}
             </select>
+          </label>
+          <label className="manual-count">
+            <span className="sr-only">生成数量</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={manualCount}
+              onChange={(event) => setManualCount(
+                Math.max(1, Math.min(20, Number(event.target.value) || 1)),
+              )}
+            />
+            <span>条</span>
           </label>
           <button
             className="secondary-button"
@@ -718,15 +1107,19 @@ export function Dashboard() {
               const result = await apiFetch("/api/manual/generate", {
                 method: "POST",
                 body: JSON.stringify({
-                  productId: selectedProduct,
+                  ...(selectedProduct === "rotate"
+                    ? { productMode: "rotate" }
+                    : { productId: selectedProduct }),
+                  count: manualCount,
+                  idempotencyKey: crypto.randomUUID(),
                   customPrompt: savedPrompts.copyPrompt,
                   imagePrompt: savedPrompts.imagePrompt,
                 }),
               });
-              return result.created ? "今日任务已创建" : "今日任务已经存在";
+              return result.created ? `已创建 ${manualCount} 条任务` : "任务已经存在";
             })}
           >
-            <Plus aria-hidden="true" />创建今日任务
+            <Plus aria-hidden="true" />立即生成
           </button>
         </div>
       </section>

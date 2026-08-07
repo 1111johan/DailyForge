@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { routeError } from "@/lib/http/route-error";
+import { ProductModeSchema } from "@/lib/scheduling/schedule-schema";
 import { createDailyJobs } from "@/lib/workflow/create-job";
 import { WorkflowError } from "@/lib/workflow/errors";
 
@@ -9,6 +10,9 @@ const ManualGenerateSchema = z
     jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     productId: z.string().uuid().optional(),
     topicId: z.string().uuid().optional(),
+    productMode: ProductModeSchema.optional(),
+    count: z.number().int().min(1).max(20).optional(),
+    idempotencyKey: z.string().uuid().optional(),
     customPrompt: z.string().trim().max(5000).optional(),
     imagePrompt: z.string().trim().max(5000).optional(),
   })

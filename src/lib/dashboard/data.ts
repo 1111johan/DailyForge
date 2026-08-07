@@ -1,6 +1,7 @@
 import { getConfigurationStatus, getGenerationConfig } from "@/lib/config/env";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { createSignedAssetUrls } from "@/lib/supabase/storage";
+import { listGenerationSchedules } from "@/lib/scheduling/repository";
 import { dateInTimeZone } from "@/lib/workflow/create-job";
 import { progressForJob } from "@/lib/workflow/state-machine";
 import type {
@@ -52,6 +53,22 @@ export interface DashboardSnapshot {
     name: string;
     level: "cet4" | "cet6";
   }>;
+  automation: {
+    enabledCount: number;
+    nextRunAt: string | null;
+    imageConcurrency: number;
+  };
+  schedules: Array<{
+    id: string;
+    name: string;
+    runTime: string;
+    weekdays: number[];
+    postCount: number;
+    productMode: "rotate" | "cet4" | "cet6";
+    isEnabled: boolean;
+    nextRunAt: string | null;
+    lastRunAt: string | null;
+  }>;
   jobs: DashboardJob[];
 }
 
@@ -67,7 +84,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   const supabase = createSupabaseAdmin();
   const timezone = getGenerationConfig().timezone;
   const today = dateInTimeZone(new Date(), timezone);
-  const [productsResult, jobsResult] = await Promise.all([
+  const [productsResult, jobsResult, schedules] = await Promise.all([
     supabase
       .from("products")
       .select("*")
@@ -77,6 +94,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
       .select("*")
       .order("created_at", { ascending: false })
       .limit(30),
+    listGenerationSchedules(),
   ]);
   if (productsResult.error || jobsResult.error) {
     throw new WorkflowError(
@@ -188,6 +206,25 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
         name: product.name,
         level: product.level,
       })),
+    automation: {
+      enabledCount: schedules.filter((schedule) => schedule.is_enabled).length,
+      nextRunAt:
+        schedules.find(
+          (schedule) => schedule.is_enabled && schedule.next_run_at,
+        )?.next_run_at || null,
+      imageConcurrency: 2,
+    },
+    schedules: schedules.map((schedule) => ({
+      id: schedule.id,
+      name: schedule.name,
+      runTime: schedule.run_time.slice(0, 5),
+      weekdays: schedule.weekdays,
+      postCount: schedule.post_count,
+      productMode: schedule.product_mode,
+      isEnabled: schedule.is_enabled,
+      nextRunAt: schedule.next_run_at,
+      lastRunAt: schedule.last_run_at,
+    })),
     jobs: dashboardJobs,
   };
 }
