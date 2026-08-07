@@ -11,6 +11,12 @@ export function jobDateMilliseconds(jobDate: string) {
   return new Date(`${jobDate}T00:00:00+08:00`).getTime();
 }
 
+export function bodyWithHashtags(body: string, hashtags: string[]) {
+  const normalizedBody = body.trim();
+  const hashtagLine = hashtags.map((hashtag) => hashtag.trim()).join(" ");
+  return hashtagLine ? `${normalizedBody}\n\n${hashtagLine}` : normalizedBody;
+}
+
 export function buildFeishuFields(input: {
   job: ContentJob;
   product: Product;
@@ -32,10 +38,13 @@ export function buildFeishuFields(input: {
       .map((title, index) => `${index + 1}. ${title}`)
       .join("\n"),
     最终标题: content.selected_title,
-    正文: content.body,
-    话题标签: content.hashtags.join("\n"),
+    正文: bodyWithHashtags(content.body, content.hashtags),
     封面主标题: content.cover.title,
     封面副标题: content.cover.subtitle,
+    图片: assets
+      .filter((asset) => Boolean(asset.feishu_file_token))
+      .toSorted((left, right) => left.asset_index - right.asset_index)
+      .map((asset) => ({ file_token: asset.feishu_file_token })),
     图片脚本: JSON.stringify(content.image_briefs, null, 2),
     生成状态: post.review_status === "approved" ? "已生成" : "需要人工检查",
     发布状态: "待发布",
@@ -45,13 +54,5 @@ export function buildFeishuFields(input: {
         : "",
     "Supabase ID": post.id,
   };
-
-  for (const asset of assets) {
-    if (asset.feishu_file_token) {
-      fields[`图片${asset.asset_index}`] = [
-        { file_token: asset.feishu_file_token },
-      ];
-    }
-  }
   return fields;
 }
