@@ -38,17 +38,28 @@ function customPromptFromJob(job: ContentJob) {
   return typeof value === "string" ? value : undefined;
 }
 
+function imagePromptFromJob(job: ContentJob) {
+  const value = job.payload.image_prompt;
+  return typeof value === "string" ? value : undefined;
+}
+
 async function prepareAssets(
   postId: string,
   product: Product,
   content: GeneratedPostContent,
+  imagePrompt?: string,
 ) {
   await ensureAssets(
     postId,
     content.image_briefs.map((brief) => ({
       asset_index: brief.index,
       asset_type: brief.type,
-      prompt: buildImagePrompt({ product, post: content, brief }),
+      prompt: buildImagePrompt({
+        product,
+        post: content,
+        brief,
+        customPrompt: imagePrompt,
+      }),
     })),
   );
 }
@@ -59,7 +70,12 @@ export async function handleGenerateCopy(job: ContentJob) {
 
   const existing = await getPostByJob(job.id);
   if (existing) {
-    await prepareAssets(existing.id, product, postRowToContent(existing));
+    await prepareAssets(
+      existing.id,
+      product,
+      postRowToContent(existing),
+      imagePromptFromJob(job),
+    );
     await markTopicUsed(topic.id);
     await advanceJob(job.id, "generate_image_1");
     return;
@@ -92,7 +108,7 @@ export async function handleGenerateCopy(job: ContentJob) {
     cover_copy: content.cover,
     image_briefs: content.image_briefs,
   });
-  await prepareAssets(post.id, product, content);
+  await prepareAssets(post.id, product, content, imagePromptFromJob(job));
   await markTopicUsed(topic.id);
   await advanceJob(job.id, "generate_image_1");
 }

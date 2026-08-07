@@ -10,6 +10,7 @@ const ManualGenerateSchema = z
     productId: z.string().uuid().optional(),
     topicId: z.string().uuid().optional(),
     customPrompt: z.string().trim().max(5000).optional(),
+    imagePrompt: z.string().trim().max(5000).optional(),
   })
   .refine((value) => !value.topicId || value.productId, {
     message: "productId is required when topicId is provided",

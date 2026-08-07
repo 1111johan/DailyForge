@@ -1,5 +1,6 @@
 import { getGenerationConfig } from "@/lib/config/env";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { getPromptSettings } from "@/lib/settings/prompt-settings";
 import type { ContentJob, ContentTopic, Product } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
 
@@ -155,10 +156,12 @@ export interface CreateJobsInput {
   productId?: string;
   topicId?: string;
   customPrompt?: string;
+  imagePrompt?: string;
 }
 
 export async function createDailyJobs(input: CreateJobsInput = {}) {
   const config = getGenerationConfig();
+  const promptSettings = await getPromptSettings();
   const jobDate = input.jobDate || dateInTimeZone(new Date(), config.timezone);
   const products = await activeProducts(input.productId);
   if (products.length === 0) {
@@ -201,9 +204,10 @@ export async function createDailyJobs(input: CreateJobsInput = {}) {
     stage: "generate_copy",
     attempts: 0,
     run_after: new Date().toISOString(),
-    payload: input.customPrompt?.trim()
-      ? { custom_prompt: input.customPrompt.trim() }
-      : {},
+    payload: {
+      custom_prompt: input.customPrompt?.trim() || promptSettings.copyPrompt,
+      image_prompt: input.imagePrompt?.trim() || promptSettings.imagePrompt,
+    },
   }));
 
   const supabase = createSupabaseAdmin();

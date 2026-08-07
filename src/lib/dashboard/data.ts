@@ -1,5 +1,6 @@
 import { getConfigurationStatus, getGenerationConfig } from "@/lib/config/env";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { createSignedAssetUrls } from "@/lib/supabase/storage";
 import { dateInTimeZone } from "@/lib/workflow/create-job";
 import { progressForJob } from "@/lib/workflow/state-machine";
 import type {
@@ -9,6 +10,7 @@ import type {
   GeneratedPost,
   Product,
 } from "@/lib/types/domain";
+import { stringArray } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
 
 export interface DashboardJob {
@@ -18,11 +20,19 @@ export interface DashboardJob {
   level: "cet4" | "cet6";
   topic: string;
   title: string | null;
+  body: string | null;
+  hashtags: string[];
   status: ContentJob["status"];
   stage: ContentJob["stage"];
   attempts: number;
   progress: number;
   readyAssets: number;
+  assets: Array<{
+    index: number;
+    type: "cover" | "content";
+    status: GeneratedAsset["status"];
+    url: string | null;
+  }>;
   errorCode: string | null;
   errorMessage: string | null;
   updatedAt: string;
@@ -116,6 +126,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   }
 
   const assets = (assetsResult.data || []) as GeneratedAsset[];
+  const signedAssetUrls = await createSignedAssetUrls(assets);
   const topics = (topicsResult.data || []) as ContentTopic[];
   const productMap = new Map(products.map((product) => [product.id, product]));
   const postMap = new Map(posts.map((post) => [post.job_id, post]));
@@ -131,6 +142,8 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
       level: product?.level || "cet4",
       topic: (job.topic_id && topicMap.get(job.topic_id)?.topic) || post?.topic || "未选择",
       title: post?.selected_title || null,
+      body: post?.body || null,
+      hashtags: post ? stringArray(post.hashtags) : [],
       status: job.status,
       stage: job.stage,
       attempts: job.attempts,
@@ -139,6 +152,17 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
         ? assets.filter((asset) => asset.post_id === post.id && asset.status === "ready")
             .length
         : 0,
+      assets: post
+        ? assets
+            .filter((asset) => asset.post_id === post.id)
+            .toSorted((a, b) => a.asset_index - b.asset_index)
+            .map((asset) => ({
+              index: asset.asset_index,
+              type: asset.asset_type,
+              status: asset.status,
+              url: signedAssetUrls.get(asset.id) || null,
+            }))
+        : [],
       errorCode: job.error_code,
       errorMessage: job.error_message,
       updatedAt: job.updated_at,

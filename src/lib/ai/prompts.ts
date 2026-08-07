@@ -63,8 +63,9 @@ export function buildImagePrompt(input: {
   product: Product;
   post: GeneratedPostContent;
   brief: ImageBrief;
+  customPrompt?: string;
 }) {
-  const { product, post, brief } = input;
+  const { product, post, brief, customPrompt } = input;
   const level = product.level === "cet4" ? "大学英语四级" : "大学英语六级";
   const prohibited = [
     ...GLOBAL_PROHIBITED_CLAIMS,
@@ -87,6 +88,12 @@ ${brief.key_points.length > 0 ? `要点：\n${brief.key_points.map((point) => `-
 视觉方向：清爽的大学生学习工作台，白色与浅灰底，深墨色正文，红色重点标记，少量绿色进度元素；使用纸张、活页夹、文具和真实学习笔记的材质，但保持信息密度清晰。禁止米黄色复古滤镜，禁止渐变、光晕、3D文字和营销海报感。
 
 排版要求：标题层级清楚，正文中文可读，不添加任何未提供的文案、品牌、考试名称或承诺。四张图保持统一视觉系统但布局不重复。
+
+${customPrompt?.trim() ? `本次图片额外要求：
+${customPrompt.trim()}
+
+额外要求只能调整画面风格、构图和信息呈现；如与尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准。
+` : ""}
 
 绝对禁止出现：${Array.from(new Set(prohibited)).join("、")}。`;
 }
