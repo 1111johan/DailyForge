@@ -46,7 +46,7 @@ export function getAiConfig() {
     imagePath: process.env.AI_IMAGE_PATH || "/v1/images/generations",
     imagePollPath:
       process.env.AI_IMAGE_POLL_PATH || "/v1/images/tasks/{taskId}",
-    timeoutMs: positiveInteger(process.env.AI_TIMEOUT_MS, 120_000),
+    timeoutMs: positiveInteger(process.env.AI_TIMEOUT_MS, 280_000),
     imageWidth: positiveInteger(process.env.AI_IMAGE_WIDTH, 1024),
     imageHeight: positiveInteger(process.env.AI_IMAGE_HEIGHT, 1536),
   };
