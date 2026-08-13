@@ -68,7 +68,7 @@ select cron.schedule(
 
 select cron.schedule(
   'dailyforge-cleanup-history',
-  '30 3 * * *',
+  '30 19 * * *',
   $$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name = 'dailyforge_base_url') || '/api/cron/cleanup',
@@ -84,7 +84,7 @@ select cron.schedule(
 
 select cron.schedule(
   'dailyforge-trim-automation-logs',
-  '45 3 * * *',
+  '45 19 * * *',
   $$
   delete from cron.job_run_details
   where end_time < now() - interval '24 hours';
