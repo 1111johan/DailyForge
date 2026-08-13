@@ -1,21 +1,27 @@
 # DailyForge Lite
 
-DailyForge Lite 是一条面向小红书图文的每日内容生产流水线：创建任务、生成结构化文案、逐张生成 4 张图片、保存到 Supabase，并将完整内容写入飞书多维表格。发布仍由人工完成。
+DailyForge Lite 是一条面向小红书图文的在线内容生产流水线：按计划创建任务、调用 AI 中转站生成文案和 4 张图片，并把任务状态与最终成果直接保存到飞书多维表格。用户电脑无需保持开机，发布仍由人工完成。
 
-## 当前范围
+## 当前能力
 
-- 幂等创建每日任务，同一日期、平台、产品只会有一条任务。
-- PostgreSQL 原子领取任务，支持并发 Worker 和 20 分钟过期锁恢复。
-- 每次请求只推进一个阶段，已完成的文案和图片不会重复生成。
-- 文案 JSON 经过 Zod 校验，错误输出最多自动纠正 2 次。
-- 图片支持 Base64、URL 和异步 `task_id` 返回。
-- 图片上传前检查文件可解码、格式、尺寸和大小。
-- 飞书图片逐个复用 `file_token`，记录按“任务ID”查重。
-- 可重试错误按 1、5、15 分钟退避，永久错误进入人工处理。
-- 运行台可直接打开，手动任务支持为当次文案填写自定义提示词。
-- 生成结果包含标题和正文，正文强制限制在 1000 个字符以内。
+- 四级内容优先面向准大一、大一新生，六级内容面向大学生进阶备考。
+- 文案包含标题、正文和横向排列的话题标签，正文不超过 1000 字。
+- 每篇生成 4 张 1024x1536 图片，统一保存在一个飞书附件字段。
+- 提示词和定时计划可在运行台修改，保存后写入飞书。
+- 同一批次使用确定性任务 ID，重复触发不会重复创建。
+- 每条任务之间随机等待 1 至 9 秒，图片任务最多同时进行 2 个。
+- 每个生成阶段可恢复、可重试；过期任务锁会自动回收。
+- AI 图片验证后直接上传飞书，不保存数据库或对象存储副本。
 
-不包含小红书自动发布、用户账号、飞书回写、视频、订单或复杂 Agent。
+## 数据结构
+
+一个飞书多维表格应用包含三张数据表：
+
+- 内容表：文案、图片、审核结果和内部任务状态。
+- `DailyForge 定时计划`：执行时间、星期、条数、四六级模式。
+- `DailyForge 系统设置`：文案提示词和图片提示词。
+
+产品事实和基础选题目录保存在 [`src/lib/catalog.ts`](src/lib/catalog.ts)，避免把稳定配置拆成更多数据表。
 
 ## 本地启动
 
@@ -24,86 +30,73 @@ DailyForge Lite 是一条面向小红书图文的每日内容生产流水线：�
 ```powershell
 npm install
 Copy-Item .env.example .env.local
+npm run setup:feishu
 npm run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。没有外部服务配置时，页面仍会显示各连接的待配置状态，但不会暴露或模拟生产任务。
+打开 [http://localhost:3000](http://localhost:3000)。
 
-## 配置顺序
-
-### 1. Supabase
-
-1. 创建 Supabase 项目。
-2. 执行 `supabase/migrations/202608060001_initial_schema.sql`。
-3. 修改 `supabase/seed.sql` 中的产品事实和选题，并将确认后的记录设为 `is_active = true`。
-4. 配置：
+## 环境配置
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_STORAGE_BUCKET=generated-content
+# AI 中转站
+AI_RELAY_BASE_URL=
+AI_RELAY_API_KEY=
+AI_TEXT_MODEL=
+AI_IMAGE_MODEL=
+AI_REVIEW_MODEL=
+AI_TEXT_PATH=/v1/chat/completions
+AI_IMAGE_PATH=/v1/images/generations
+AI_IMAGE_POLL_PATH=/v1/images/tasks/{taskId}
+AI_TIMEOUT_MS=280000
+AI_IMAGE_WIDTH=1024
+AI_IMAGE_HEIGHT=1536
+
+# 飞书企业自建应用
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+FEISHU_BITABLE_APP_TOKEN=
+FEISHU_TABLE_ID=
+FEISHU_SCHEDULE_TABLE_ID=
+FEISHU_SETTINGS_TABLE_ID=
+
+# 在线定时接口保护
+CRON_SECRET=
+WORKER_SECRET=
+
+DEFAULT_PLATFORM=xiaohongshu
+DAILY_GENERATION_COUNT=1
+APP_TIMEZONE=Asia/Shanghai
 ```
 
-尽管变量名沿用 `NEXT_PUBLIC_SUPABASE_URL`，应用只在服务端创建 Supabase 客户端；`SUPABASE_SERVICE_ROLE_KEY` 永远不能放入浏览器代码。
+`npm run setup:feishu` 会在内容表补齐内部字段，并幂等创建计划表和设置表。脚本不会修改或删除历史内容。
 
-### 2. AI 中转站
+## 在线自动执行
 
-所需信息见 [`docs/ai-relay-contract.md`](docs/ai-relay-contract.md)。首版按 OpenAI 兼容接口发送请求，业务工作流不依赖具体模型。
-
-### 3. 飞书
-
-按 [`docs/feishu-setup.md`](docs/feishu-setup.md) 建立企业自建应用和多维表格。字段名称和类型必须一致，否则任务会以不可重试错误停止，等待人工修正。
-
-### 4. 自动化密钥
-
-生成两个不同的长随机值：
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-分别填写 `CRON_SECRET` 和 `WORKER_SECRET`。它们只用于保护定时创建任务和 Worker 回调。
-
-## 部署
-
-1. 将项目部署到 Vercel，并填写 `.env.example` 中的环境变量。
-2. 暂时不要启用 Cron。
-3. 打开运行台，手动创建一条任务，并反复点击“推进一步”完成端到端验证。
-4. 确认飞书内出现且只出现一条记录，4 张图片可预览。
-5. 在 Supabase SQL Editor 执行 `supabase/cron.sql`。每天 08:00（Asia/Shanghai）创建任务，每分钟推进一个步骤。
-
-`cron.sql` 使用 Supabase Vault 保存部署地址和密钥，文件内不写明文凭据。
-
-运行台和三个 `/api/manual/*` 接口不再使用应用内密钥，适合本机或受信任的私有网络。若部署到公网，必须先启用 Vercel Deployment Protection、反向代理认证或等效的外层访问保护，否则任何能访问站点的人都可以创建、推进或重试任务。
-
-## 状态机
+部署到 Vercel 后，由外部分钟级定时器每分钟发送一次：
 
 ```text
-generate_copy
-  -> generate_image_1 -> poll_image_1（仅异步接口）
-  -> generate_image_2 -> poll_image_2（仅异步接口）
-  -> generate_image_3 -> poll_image_3（仅异步接口）
-  -> generate_image_4 -> poll_image_4（仅异步接口）
-  -> review_content
-  -> sync_feishu
-  -> completed
+POST https://YOUR_DOMAIN/api/cron/tick
+Authorization: Bearer YOUR_CRON_SECRET
 ```
 
-每个阶段成功后将任务重新放回队列。下一次 Worker 调用领取并推进后续阶段。
+一次心跳会先检查到期计划，再推进一个待处理阶段。接口与飞书任务 ID 都具备幂等保护，重复请求不会重复创建同一批内容。
 
 ## 服务端接口
 
-| 接口 | 密钥 | 用途 |
-| --- | --- | --- |
-| `GET /api/health` | 无 | 只返回各服务是否配置，不返回配置值 |
-| `GET /api/dashboard` | 无 | 读取运行台数据 |
-| `POST /api/cron/create-daily-job` | `CRON_SECRET` | 幂等创建今日任务 |
-| `POST /api/worker/run` | `WORKER_SECRET` | 推进一个任务阶段 |
-| `POST /api/manual/generate` | 无 | 手动创建任务，可提交 `customPrompt` |
-| `POST /api/manual/run-worker` | 无 | 从运行台推进一步 |
-| `POST /api/manual/retry` | 无 | 重置失败任务的重试次数 |
+| 接口 | 用途 |
+| --- | --- |
+| `GET /api/health` | 检查 AI、飞书和定时密钥是否配置 |
+| `GET /api/dashboard` | 读取飞书任务、结果和计划 |
+| `POST /api/cron/tick` | 在线定时心跳，需 `CRON_SECRET` |
+| `POST /api/worker/run` | 单独推进一个任务阶段，需 `WORKER_SECRET` |
+| `POST /api/manual/generate` | 从运行台手动创建任务 |
+| `POST /api/manual/run-worker` | 从运行台手动推进一步 |
+| `POST /api/manual/retry` | 重试失败任务 |
+| `GET/POST/PATCH/DELETE /api/schedules` | 管理飞书定时计划 |
+| `GET/PUT /api/settings/prompts` | 读取或保存飞书提示词 |
 
-定时任务和 Worker 的鉴权格式：`Authorization: Bearer <secret>`。
+运行台与手动接口没有应用内登录。公开部署时应启用 Vercel Deployment Protection 或等效访问保护。
 
 ## 验证
 
@@ -114,17 +107,4 @@ npm test
 npm run build
 ```
 
-数据库并发锁、Storage 和真实飞书附件需要在 Supabase/飞书测试项目中完成集成验收，不能由本地模拟替代。完整清单见 [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)。
-
-## 目录
-
-```text
-src/app/api/       调度、Worker、运行台和手动任务接口
-src/components/    运行看板
-src/lib/ai/        AI Gateway、Prompt 和输出 Schema
-src/lib/feishu/    Token、素材、记录和字段映射
-src/lib/supabase/  服务端客户端与私有 Storage
-src/lib/workflow/  状态机的各执行阶段
-supabase/          数据库迁移、示例数据和 Cron
-docs/              外部服务接入与验收说明
-```
+真实飞书验收顺序见 [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md)。

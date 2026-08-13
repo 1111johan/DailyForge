@@ -8,11 +8,11 @@ import { WorkflowError } from "@/lib/workflow/errors";
 const ManualGenerateSchema = z
   .object({
     jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    productId: z.string().uuid().optional(),
-    topicId: z.string().uuid().optional(),
+    productId: z.enum(["cet4", "cet6"]).optional(),
+    topicId: z.string().trim().min(1).max(120).optional(),
     productMode: ProductModeSchema.optional(),
     count: z.number().int().min(1).max(20).optional(),
-    idempotencyKey: z.string().uuid().optional(),
+    idempotencyKey: z.string().trim().min(1).max(200).optional(),
     customPrompt: z.string().trim().max(5000).optional(),
     imagePrompt: z.string().trim().max(5000).optional(),
   })

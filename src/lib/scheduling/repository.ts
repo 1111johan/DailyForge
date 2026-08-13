@@ -1,160 +1,162 @@
-import { createSupabaseAdmin } from "@/lib/supabase/admin";
-import type {
-  GenerationBatch,
-  GenerationSchedule,
-} from "@/lib/types/domain";
+import { getFeishuConfig } from "@/lib/config/env";
+import { getFeishuTenantToken } from "@/lib/feishu/auth";
+import {
+  createFeishuRecord,
+  deleteFeishuRecord,
+  getFeishuRecord,
+  listFeishuRecords,
+  updateFeishuRecord,
+} from "@/lib/feishu/bitable";
+import {
+  booleanValue,
+  dateField,
+  dateValue,
+  jsonValue,
+  numberValue,
+  textValue,
+} from "@/lib/feishu/values";
+import type { GenerationSchedule } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
-import type {
-  ScheduleInput,
-  SchedulePatch,
-} from "@/lib/scheduling/schedule-schema";
+import type { ScheduleInput, SchedulePatch } from "@/lib/scheduling/schedule-schema";
 
-function schedulingError(
-  message: string,
-  error: { message: string; code?: string },
-) {
-  return new WorkflowError(
-    `${message}: ${error.message}`,
-    `SCHEDULING_${error.code || "ERROR"}`,
-    !error.code || !["23503", "23505", "23514", "PGRST116"].includes(error.code),
-  );
+const TIMEZONE = "Asia/Shanghai";
+
+function partsAt(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
 }
 
-function scheduleRow(input: ScheduleInput | SchedulePatch) {
+export function nextScheduleAt(
+  runTime: string,
+  weekdays: number[],
+  after = new Date(),
+) {
+  const [hour, minute] = runTime.split(":").map(Number);
+  const local = partsAt(after);
+  const localYear = Number(local.year);
+  const localMonth = Number(local.month);
+  const localDay = Number(local.day);
+  const base = new Date(`${local.year}-${local.month}-${local.day}T00:00:00+08:00`);
+  for (let offset = 0; offset <= 7; offset += 1) {
+    const candidate = new Date(base.getTime() + offset * 86_400_000);
+    const localCalendarDate = new Date(
+      Date.UTC(localYear, localMonth - 1, localDay + offset),
+    );
+    const isoDay =
+      localCalendarDate.getUTCDay() === 0 ? 7 : localCalendarDate.getUTCDay();
+    if (!weekdays.includes(isoDay)) continue;
+    const at = new Date(candidate.getTime() + hour * 3_600_000 + minute * 60_000);
+    if (at.getTime() > after.getTime()) return at.toISOString();
+  }
+  throw new WorkflowError("Unable to calculate next schedule", "SCHEDULE_TIME_INVALID", false);
+}
+
+function scheduleFromRecord(record: Awaited<ReturnType<typeof getFeishuRecord>>): GenerationSchedule {
+  const fields = record.fields;
   return {
-    ...(input.name === undefined ? {} : { name: input.name }),
-    ...(input.runTime === undefined ? {} : { run_time: input.runTime }),
-    ...(input.weekdays === undefined ? {} : { weekdays: input.weekdays }),
-    ...(input.postCount === undefined ? {} : { post_count: input.postCount }),
-    ...(input.productMode === undefined
-      ? {}
-      : { product_mode: input.productMode }),
-    ...(input.isEnabled === undefined
-      ? {}
-      : { is_enabled: input.isEnabled }),
+    id: record.record_id,
+    name: textValue(fields["\u8ba1\u5212\u540d\u79f0"], "\u672a\u547d\u540d\u8ba1\u5212"),
+    run_time: textValue(fields["\u8fd0\u884c\u65f6\u95f4"], "08:00"),
+    weekdays: jsonValue<number[]>(fields["\u6267\u884c\u661f\u671f"], [1, 2, 3, 4, 5, 6, 7]),
+    post_count: numberValue(fields["\u751f\u6210\u6761\u6570"], 3),
+    product_mode: textValue(fields["\u4ea7\u54c1\u6a21\u5f0f"], "rotate") as GenerationSchedule["product_mode"],
+    is_enabled: booleanValue(fields["\u662f\u5426\u542f\u7528"], true),
+    next_run_at: dateValue(fields["\u4e0b\u6b21\u8fd0\u884c"]),
+    last_run_at: dateValue(fields["\u4e0a\u6b21\u8fd0\u884c"]),
+    created_at: record.created_time
+      ? new Date(
+          Number(record.created_time) < 10_000_000_000
+            ? Number(record.created_time) * 1000
+            : Number(record.created_time),
+        ).toISOString()
+      : new Date().toISOString(),
+    updated_at: record.last_modified_time
+      ? new Date(
+          Number(record.last_modified_time) < 10_000_000_000
+            ? Number(record.last_modified_time) * 1000
+            : Number(record.last_modified_time),
+        ).toISOString()
+      : new Date().toISOString(),
   };
+}
+
+function scheduleFields(input: ScheduleInput | SchedulePatch, current?: GenerationSchedule) {
+  const merged = {
+    name: input.name ?? current?.name,
+    runTime: input.runTime ?? current?.run_time,
+    weekdays: input.weekdays ?? current?.weekdays,
+    postCount: input.postCount ?? current?.post_count,
+    productMode: input.productMode ?? current?.product_mode,
+    isEnabled: input.isEnabled ?? current?.is_enabled,
+  };
+  const fields: Record<string, unknown> = {};
+  if (input.name !== undefined) fields["\u8ba1\u5212\u540d\u79f0"] = input.name;
+  if (input.runTime !== undefined) fields["\u8fd0\u884c\u65f6\u95f4"] = input.runTime;
+  if (input.weekdays !== undefined) fields["\u6267\u884c\u661f\u671f"] = JSON.stringify(input.weekdays);
+  if (input.postCount !== undefined) fields["\u751f\u6210\u6761\u6570"] = input.postCount;
+  if (input.productMode !== undefined) fields["\u4ea7\u54c1\u6a21\u5f0f"] = input.productMode;
+  if (input.isEnabled !== undefined) fields["\u662f\u5426\u542f\u7528"] = input.isEnabled;
+  if (merged.runTime && merged.weekdays && merged.isEnabled !== undefined) {
+    fields["\u4e0b\u6b21\u8fd0\u884c"] = merged.isEnabled
+      ? dateField(nextScheduleAt(merged.runTime, merged.weekdays))
+      : null;
+  }
+  return fields;
 }
 
 export async function listGenerationSchedules() {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("generation_schedules")
-    .select("*")
-    .order("next_run_at", { ascending: true, nullsFirst: false })
-    .order("created_at");
-  if (error) throw schedulingError("Failed to load schedules", error);
-  return (data || []) as GenerationSchedule[];
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const records = await listFeishuRecords(token, config.scheduleTableId);
+  return records.map(scheduleFromRecord).toSorted((left, right) =>
+    (left.next_run_at || "z").localeCompare(right.next_run_at || "z"),
+  );
 }
 
 export async function createGenerationSchedule(input: ScheduleInput) {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("generation_schedules")
-    .insert(scheduleRow(input))
-    .select("*")
-    .single();
-  if (error) throw schedulingError("Failed to create schedule", error);
-  return data as GenerationSchedule;
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const record = await createFeishuRecord(
+    token,
+    config.scheduleTableId,
+    scheduleFields(input),
+  );
+  return scheduleFromRecord(record);
 }
 
-export async function updateGenerationSchedule(
-  id: string,
-  input: SchedulePatch,
-) {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("generation_schedules")
-    .update(scheduleRow(input))
-    .eq("id", id)
-    .select("*")
-    .single();
-  if (error) throw schedulingError("Failed to update schedule", error);
-  return data as GenerationSchedule;
+export async function updateGenerationSchedule(id: string, input: SchedulePatch) {
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const current = scheduleFromRecord(await getFeishuRecord(token, config.scheduleTableId, id));
+  await updateFeishuRecord(
+    token,
+    config.scheduleTableId,
+    id,
+    scheduleFields(input, current),
+  );
+  return scheduleFromRecord(await getFeishuRecord(token, config.scheduleTableId, id));
 }
 
 export async function deleteGenerationSchedule(id: string) {
-  const supabase = createSupabaseAdmin();
-  const { error, count } = await supabase
-    .from("generation_schedules")
-    .delete({ count: "exact" })
-    .eq("id", id);
-  if (error) throw schedulingError("Failed to delete schedule", error);
-  if (!count) {
-    throw new WorkflowError("Schedule does not exist", "SCHEDULE_NOT_FOUND", false);
-  }
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  await deleteFeishuRecord(token, config.scheduleTableId, id);
 }
 
-export async function createManualBatch(input: {
-  idempotencyKey: string;
-  requestedCount: number;
-  productMode: GenerationBatch["product_mode"];
-  productId?: string;
-  promptSnapshot: Record<string, unknown>;
-}) {
-  const supabase = createSupabaseAdmin();
-  const row = {
-    source: "manual",
-    schedule_id: null,
-    product_id: input.productId || null,
-    scheduled_for: null,
-    idempotency_key: input.idempotencyKey,
-    requested_count: input.requestedCount,
-    product_mode: input.productMode,
-    prompt_snapshot: input.promptSnapshot,
-  };
-  const { data, error } = await supabase
-    .from("generation_batches")
-    .upsert(row, { onConflict: "idempotency_key", ignoreDuplicates: true })
-    .select("*")
-    .maybeSingle();
-  if (error) throw schedulingError("Failed to create generation batch", error);
-  if (data) return data as GenerationBatch;
-
-  const { data: existing, error: existingError } = await supabase
-    .from("generation_batches")
-    .select("*")
-    .eq("idempotency_key", input.idempotencyKey)
-    .single();
-  if (existingError) {
-    throw schedulingError("Failed to load generation batch", existingError);
-  }
-  return existing as GenerationBatch;
-}
-
-export async function listPendingGenerationBatches() {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("generation_batches")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at")
-    .limit(20);
-  if (error) throw schedulingError("Failed to load pending batches", error);
-  return (data || []) as GenerationBatch[];
-}
-
-export async function claimDueGenerationBatches() {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase.rpc("claim_due_generation_batches", {
-    p_limit: 10,
+export async function markScheduleRun(schedule: GenerationSchedule, scheduledFor: string) {
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const next = nextScheduleAt(schedule.run_time, schedule.weekdays, new Date(scheduledFor));
+  await updateFeishuRecord(token, config.scheduleTableId, schedule.id, {
+    "\u4e0a\u6b21\u8fd0\u884c": dateField(scheduledFor),
+    "\u4e0b\u6b21\u8fd0\u884c": dateField(next),
   });
-  if (error) throw schedulingError("Failed to claim due schedules", error);
-  return (data || []) as GenerationBatch[];
-}
-
-export async function updateGenerationBatch(
-  id: string,
-  update: Partial<
-    Pick<
-      GenerationBatch,
-      "created_count" | "status" | "attempts" | "error_message"
-    >
-  >,
-) {
-  const supabase = createSupabaseAdmin();
-  const { error } = await supabase
-    .from("generation_batches")
-    .update(update)
-    .eq("id", id);
-  if (error) throw schedulingError("Failed to update generation batch", error);
 }

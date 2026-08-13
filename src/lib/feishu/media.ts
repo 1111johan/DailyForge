@@ -2,7 +2,9 @@ import { getFeishuConfig } from "@/lib/config/env";
 import { feishuFetch } from "@/lib/feishu/client";
 import { WorkflowError } from "@/lib/workflow/errors";
 
-export async function uploadImageToFeishu(input: {
+let uploadQueue: Promise<void> = Promise.resolve();
+
+async function performUpload(input: {
   token: string;
   fileName: string;
   buffer: Buffer;
@@ -34,4 +36,18 @@ export async function uploadImageToFeishu(input: {
     );
   }
   return data.file_token;
+}
+
+export function uploadImageToFeishu(input: {
+  token: string;
+  fileName: string;
+  buffer: Buffer;
+  mimeType: string;
+}) {
+  const upload = uploadQueue.then(() => performUpload(input));
+  uploadQueue = upload.then(
+    () => undefined,
+    () => undefined,
+  );
+  return upload;
 }

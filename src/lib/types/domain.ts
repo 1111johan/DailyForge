@@ -82,24 +82,6 @@ export interface GenerationSchedule {
   updated_at: string;
 }
 
-export interface GenerationBatch {
-  id: string;
-  source: "manual" | "schedule";
-  schedule_id: string | null;
-  product_id: string | null;
-  scheduled_for: string | null;
-  idempotency_key: string;
-  requested_count: number;
-  created_count: number;
-  product_mode: ProductMode;
-  prompt_snapshot: Record<string, unknown>;
-  status: "pending" | "populated" | "failed";
-  attempts: number;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface GeneratedPost {
   id: string;
   job_id: string;

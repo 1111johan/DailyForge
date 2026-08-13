@@ -1,57 +1,53 @@
-import { createSupabaseAdmin } from "@/lib/supabase/admin";
+import { getFeishuConfig } from "@/lib/config/env";
+import { getFeishuTenantToken } from "@/lib/feishu/auth";
+import {
+  createFeishuRecord,
+  findFeishuRecordByField,
+  updateFeishuRecord,
+} from "@/lib/feishu/bitable";
 import {
   DEFAULT_PROMPT_SETTINGS,
   PROMPT_SETTINGS_KEY,
   PromptSettingsSchema,
   type PromptSettings,
 } from "@/lib/settings/prompt-settings-schema";
-import { WorkflowError } from "@/lib/workflow/errors";
-
-interface AppSettingRow {
-  key: string;
-  value: unknown;
-  updated_at: string;
-}
 
 export async function getPromptSettings(): Promise<PromptSettings> {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("app_settings")
-    .select("key,value,updated_at")
-    .eq("key", PROMPT_SETTINGS_KEY)
-    .maybeSingle();
-
-  if (error) {
-    throw new WorkflowError(
-      `Failed to load prompt settings: ${error.message}`,
-      "PROMPT_SETTINGS_QUERY_FAILED",
-      true,
-      { cause: error },
-    );
-  }
-
-  const parsed = PromptSettingsSchema.safeParse((data as AppSettingRow | null)?.value);
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const record = await findFeishuRecordByField(
+    token,
+    config.settingsTableId,
+    "\u8bbe\u7f6e\u952e",
+    PROMPT_SETTINGS_KEY,
+  );
+  if (!record) return { ...DEFAULT_PROMPT_SETTINGS };
+  const parsed = PromptSettingsSchema.safeParse({
+    copyPrompt: record.fields["\u6587\u6848\u63d0\u793a\u8bcd"],
+    imagePrompt: record.fields["\u56fe\u7247\u63d0\u793a\u8bcd"],
+  });
   return parsed.success ? parsed.data : { ...DEFAULT_PROMPT_SETTINGS };
 }
 
 export async function savePromptSettings(input: PromptSettings): Promise<PromptSettings> {
   const settings = PromptSettingsSchema.parse(input);
-  const supabase = createSupabaseAdmin();
-  const { error } = await supabase.from("app_settings").upsert(
-    {
-      key: PROMPT_SETTINGS_KEY,
-      value: settings,
-    },
-    { onConflict: "key" },
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const existing = await findFeishuRecordByField(
+    token,
+    config.settingsTableId,
+    "\u8bbe\u7f6e\u952e",
+    PROMPT_SETTINGS_KEY,
   );
-
-  if (error) {
-    throw new WorkflowError(
-      `Failed to save prompt settings: ${error.message}`,
-      "PROMPT_SETTINGS_SAVE_FAILED",
-      true,
-      { cause: error },
-    );
+  const fields = {
+    "\u8bbe\u7f6e\u952e": PROMPT_SETTINGS_KEY,
+    "\u6587\u6848\u63d0\u793a\u8bcd": settings.copyPrompt,
+    "\u56fe\u7247\u63d0\u793a\u8bcd": settings.imagePrompt,
+  };
+  if (existing) {
+    await updateFeishuRecord(token, config.settingsTableId, existing.record_id, fields);
+  } else {
+    await createFeishuRecord(token, config.settingsTableId, fields);
   }
   return settings;
 }

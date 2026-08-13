@@ -1,5 +1,4 @@
 import { GLOBAL_PROHIBITED_CLAIMS } from "@/lib/ai/prompts";
-import { uploadBuffer } from "@/lib/supabase/storage";
 import type { ContentJob } from "@/lib/types/domain";
 import { stringArray } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
@@ -60,13 +59,6 @@ export async function handleReview(job: ContentJob) {
     violations.push(`正文长度为${content.body.length}，建议控制在500至900字`);
   }
 
-  const contentPath = `${job.job_date.replaceAll("-", "/")}/${post.id}/content.json`;
-  await uploadBuffer({
-    path: contentPath,
-    buffer: Buffer.from(JSON.stringify(content, null, 2), "utf8"),
-    contentType: "application/json",
-    upsert: true,
-  });
   await updatePost(post.id, {
     review_status: violations.length === 0 ? "approved" : "needs_review",
     review_notes: violations,

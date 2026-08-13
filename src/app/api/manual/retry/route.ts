@@ -4,7 +4,7 @@ import { routeError } from "@/lib/http/route-error";
 import { WorkflowError } from "@/lib/workflow/errors";
 import { retryFailedJob } from "@/lib/workflow/manual-retry";
 
-const RetrySchema = z.object({ jobId: z.string().uuid() });
+const RetrySchema = z.object({ jobId: z.string().trim().min(1).max(200) });
 
 export const dynamic = "force-dynamic";
 

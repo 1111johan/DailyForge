@@ -3,6 +3,7 @@ import {
   ScheduleInputSchema,
   SchedulePatchSchema,
 } from "@/lib/scheduling/schedule-schema";
+import { nextScheduleAt } from "@/lib/scheduling/repository";
 
 describe("generation schedule validation", () => {
   const valid = {
@@ -31,5 +32,14 @@ describe("generation schedule validation", () => {
     expect(SchedulePatchSchema.parse({ isEnabled: false })).toEqual({
       isEnabled: false,
     });
+  });
+
+  it("calculates the next run in Shanghai time across UTC day boundaries", () => {
+    expect(
+      nextScheduleAt("09:00", [4], new Date("2026-08-13T00:30:00.000Z")),
+    ).toBe("2026-08-13T01:00:00.000Z");
+    expect(
+      nextScheduleAt("08:00", [7], new Date("2026-08-15T16:30:00.000Z")),
+    ).toBe("2026-08-16T00:00:00.000Z");
   });
 });

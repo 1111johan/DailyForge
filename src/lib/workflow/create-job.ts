@@ -1,19 +1,21 @@
-import { getGenerationConfig } from "@/lib/config/env";
+import { createHash } from "node:crypto";
+import { activeProducts, topicsForProduct } from "@/lib/catalog";
+import { getGenerationConfig, getFeishuConfig } from "@/lib/config/env";
+import { getFeishuTenantToken } from "@/lib/feishu/auth";
 import {
-  createManualBatch,
-  updateGenerationBatch,
-} from "@/lib/scheduling/repository";
-import { PromptSettingsSchema } from "@/lib/settings/prompt-settings-schema";
+  createFeishuRecord,
+  findFeishuRecordByField,
+} from "@/lib/feishu/bitable";
+import { stateFields, type FeishuContentState } from "@/lib/feishu/content-state";
 import { getPromptSettings } from "@/lib/settings/prompt-settings";
-import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import type {
   ContentJob,
   ContentTopic,
-  GenerationBatch,
   Product,
   ProductMode,
 } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
+import { listStoredContentStates } from "@/lib/workflow/repository";
 
 export function dateInTimeZone(date = new Date(), timezone = "Asia/Shanghai") {
   return new Intl.DateTimeFormat("en-CA", {
@@ -45,283 +47,105 @@ export function repeatBalanced<T>(items: T[], count: number) {
   return Array.from({ length: count }, (_, index) => items[index % items.length]);
 }
 
-async function activeProducts(input: {
-  productId?: string;
-  productMode: ProductMode;
-}) {
-  const supabase = createSupabaseAdmin();
-  let query = supabase.from("products").select("*").eq("is_active", true);
-  if (input.productId) {
-    query = query.eq("id", input.productId);
-  } else if (input.productMode !== "rotate") {
-    query = query.eq("level", input.productMode);
-  }
-  const { data, error } = await query.order("created_at");
-  if (error) {
-    throw new WorkflowError(
-      `Failed to load active products: ${error.message}`,
-      "PRODUCT_QUERY_FAILED",
-      true,
-    );
-  }
-  return (data || []) as Product[];
+function deterministicId(value: string) {
+  const hex = createHash("sha256").update(value).digest("hex").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 }
 
-async function orderProductsByLastUse(products: Product[], jobDate: string) {
+async function orderedProducts(products: Product[]) {
   if (products.length < 2) return products;
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("content_jobs")
-    .select("product_id,job_date,created_at")
-    .in("product_id", products.map((product) => product.id))
-    .lt("job_date", jobDate)
-    .neq("status", "failed")
-    .order("job_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1000);
-  if (error) {
-    throw new WorkflowError(
-      `Failed to load product rotation: ${error.message}`,
-      "PRODUCT_ROTATION_QUERY_FAILED",
-      true,
-    );
-  }
+  const states = await listStoredContentStates();
   const lastUse = new Map<string, string>();
-  for (const row of data || []) {
-    if (!lastUse.has(row.product_id)) lastUse.set(row.product_id, row.job_date);
+  for (const state of states.toSorted((a, b) => b.job.created_at.localeCompare(a.job.created_at))) {
+    if (!lastUse.has(state.job.product_id) && state.job.status !== "failed") {
+      lastUse.set(state.job.product_id, state.job.created_at);
+    }
   }
-  return products.toSorted((a, b) => {
-    const aDate = lastUse.get(a.id) || "";
-    const bDate = lastUse.get(b.id) || "";
-    return aDate.localeCompare(bDate) || a.created_at.localeCompare(b.created_at);
-  });
-}
-
-function topicRelation(value: unknown) {
-  const relation = Array.isArray(value) ? value[0] : value;
-  return relation && typeof relation === "object"
-    ? (relation as { module?: string | null; content_type?: string | null })
-    : null;
+  return products.toSorted((left, right) =>
+    (lastUse.get(left.id) || "").localeCompare(lastUse.get(right.id) || ""),
+  );
 }
 
 function isDisplayContent(value: string | null | undefined) {
-  return Boolean(value && (value.includes("展示") || value.includes("产品")));
+  return Boolean(value && (value.includes("\u5c55\u793a") || value.includes("\u4ea7\u54c1")));
 }
 
-async function rankTopics(input: {
-  productId: string;
-  jobDate: string;
-  topicId?: string;
-}) {
-  const supabase = createSupabaseAdmin();
-  let topicQuery = supabase
-    .from("content_topics")
-    .select("*")
-    .eq("product_id", input.productId)
-    .eq("is_active", true);
-  if (input.topicId) topicQuery = topicQuery.eq("id", input.topicId);
+async function rankTopics(productId: string, jobDate: string, topicId?: string) {
+  const topics = topicsForProduct(productId);
+  if (topicId) return topics.filter((topic) => topic.id === topicId);
 
-  const cutoff = new Date(`${input.jobDate}T00:00:00Z`);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 30);
-  const cutoffDate = cutoff.toISOString().slice(0, 10);
-  const [topicResult, recentResult] = await Promise.all([
-    topicQuery.order("priority", { ascending: false }),
-    supabase
-      .from("content_jobs")
-      .select("job_date,content_topics(module,content_type)")
-      .eq("product_id", input.productId)
-      .gte("job_date", cutoffDate)
-      .lt("job_date", input.jobDate)
-      .neq("status", "failed")
-      .order("job_date", { ascending: false }),
-  ]);
-  if (topicResult.error || recentResult.error) {
-    throw new WorkflowError(
-      `Failed to load topics: ${topicResult.error?.message || recentResult.error?.message}`,
-      "TOPIC_QUERY_FAILED",
-      true,
-    );
-  }
+  const cutoff = new Date(`${jobDate}T00:00:00+08:00`);
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffDate = dateInTimeZone(cutoff);
+  const recent = (await listStoredContentStates())
+    .filter(
+      (state) =>
+        state.job.product_id === productId &&
+        state.job.job_date >= cutoffDate &&
+        state.job.job_date < jobDate &&
+        state.job.status !== "failed",
+    )
+    .toSorted((a, b) => b.job.created_at.localeCompare(a.job.created_at));
+  const usedTopicIds = new Set(recent.map((state) => state.job.topic_id));
+  let pool = topics.filter((topic) => !usedTopicIds.has(topic.id));
+  if (pool.length === 0) pool = topics;
 
-  const topics = (topicResult.data || []) as ContentTopic[];
-  if (input.topicId) return topics;
-
-  const candidates = topics.filter(
-    (topic) => !topic.planned_date || topic.planned_date <= input.jobDate,
-  );
-  const cutoffTimestamp = `${cutoffDate}T00:00:00.000Z`;
-  const freshTopics = candidates.filter(
-    (topic) => !topic.used_at || topic.used_at < cutoffTimestamp,
-  );
-  let pool = freshTopics.length > 0 ? freshTopics : candidates;
-
-  const recentRelations = (recentResult.data || [])
-    .map((row) => topicRelation(row.content_topics))
-    .filter((relation) => relation !== null);
-  const lastRelation = recentRelations[0] || null;
-  if (isDisplayContent(lastRelation?.content_type)) {
-    const withoutDisplay = pool.filter(
-      (topic) => !isDisplayContent(topic.content_type),
-    );
+  const recentTopics = recent
+    .map((state) => topics.find((topic) => topic.id === state.job.topic_id))
+    .filter((topic): topic is ContentTopic => Boolean(topic));
+  if (isDisplayContent(recentTopics[0]?.content_type)) {
+    const withoutDisplay = pool.filter((topic) => !isDisplayContent(topic.content_type));
     if (withoutDisplay.length > 0) pool = withoutDisplay;
   }
 
   const moduleCounts = new Map<string, number>();
   const typeCounts = new Map<string, number>();
-  for (const relation of recentRelations) {
-    if (relation.module) {
-      moduleCounts.set(relation.module, (moduleCounts.get(relation.module) || 0) + 1);
-    }
-    if (relation.content_type) {
-      typeCounts.set(
-        relation.content_type,
-        (typeCounts.get(relation.content_type) || 0) + 1,
-      );
-    }
+  for (const topic of recentTopics) {
+    moduleCounts.set(topic.module || "", (moduleCounts.get(topic.module || "") || 0) + 1);
+    typeCounts.set(topic.content_type, (typeCounts.get(topic.content_type) || 0) + 1);
   }
-
-  return pool.toSorted((a, b) => {
-    const aPlanned = a.planned_date === input.jobDate ? 1 : 0;
-    const bPlanned = b.planned_date === input.jobDate ? 1 : 0;
-    if (aPlanned !== bPlanned) return bPlanned - aPlanned;
-    if (a.used_at === null && b.used_at !== null) return -1;
-    if (a.used_at !== null && b.used_at === null) return 1;
-    const aBalance =
-      (moduleCounts.get(a.module || "") || 0) +
-      (typeCounts.get(a.content_type) || 0);
-    const bBalance =
-      (moduleCounts.get(b.module || "") || 0) +
-      (typeCounts.get(b.content_type) || 0);
-    if (aBalance !== bBalance) return aBalance - bBalance;
-    if (a.priority !== b.priority) return b.priority - a.priority;
-    return (a.used_at || "").localeCompare(b.used_at || "");
+  return pool.toSorted((left, right) => {
+    const leftCount =
+      (moduleCounts.get(left.module || "") || 0) +
+      (typeCounts.get(left.content_type) || 0);
+    const rightCount =
+      (moduleCounts.get(right.module || "") || 0) +
+      (typeCounts.get(right.content_type) || 0);
+    return leftCount - rightCount || right.priority - left.priority;
   });
 }
 
-async function jobsForBatch(batchId: string) {
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("content_jobs")
-    .select("*")
-    .eq("batch_id", batchId)
-    .order("sequence_no");
-  if (error) {
-    throw new WorkflowError(
-      `Failed to load batch jobs: ${error.message}`,
-      "JOB_QUERY_FAILED",
-      true,
-    );
-  }
-  return (data || []) as ContentJob[];
+function initialState(job: ContentJob): FeishuContentState {
+  return { version: 1, job, post: null, assets: [] };
 }
 
-function promptSnapshot(batch: GenerationBatch) {
-  const parsed = PromptSettingsSchema.safeParse(batch.prompt_snapshot);
-  return parsed.success ? parsed.data : null;
-}
-
-export async function populateGenerationBatch(
-  batch: GenerationBatch,
-  input: { jobDate?: string; topicId?: string } = {},
-) {
-  if (batch.status === "populated") {
-    return { created: false, batch, jobs: await jobsForBatch(batch.id) };
-  }
-
-  const config = getGenerationConfig();
-  const scheduledDate = batch.scheduled_for
-    ? new Date(batch.scheduled_for)
-    : new Date();
-  const jobDate =
-    input.jobDate || dateInTimeZone(scheduledDate, config.timezone);
-  const products = await activeProducts({
-    productId: batch.product_id || undefined,
-    productMode: batch.product_mode,
-  });
-  if (products.length === 0) {
-    throw new WorkflowError(
-      "No active product is configured for this schedule",
-      "NO_ACTIVE_PRODUCT",
-      false,
-    );
-  }
-
-  const orderedProducts = batch.product_id
-    ? products
-    : await orderProductsByLastUse(products, jobDate);
-  const productSequence = repeatBalanced(orderedProducts, batch.requested_count);
-  const uniqueProductIds = [...new Set(productSequence.map((product) => product.id))];
-  const topicEntries = await Promise.all(
-    uniqueProductIds.map(async (productId) => [
-      productId,
-      await rankTopics({ productId, jobDate, topicId: input.topicId }),
-    ] as const),
+async function createJobRecord(input: {
+  job: ContentJob;
+  product: Product;
+  topic: ContentTopic;
+}) {
+  const token = await getFeishuTenantToken();
+  const config = getFeishuConfig();
+  const existing = await findFeishuRecordByField(
+    token,
+    config.tableId,
+    "\u4efb\u52a1ID",
+    input.job.id,
   );
-  const topicsByProduct = new Map(topicEntries);
-  const topicUse = new Map<string, number>();
-  const selections = productSequence.map((product) => {
-    const topics = topicsByProduct.get(product.id) || [];
-    if (topics.length === 0) {
-      throw new WorkflowError(
-        `No active topic is available for ${product.name}`,
-        "NO_ACTIVE_TOPIC",
-        false,
-      );
-    }
-    const useIndex = topicUse.get(product.id) || 0;
-    topicUse.set(product.id, useIndex + 1);
-    return { product, topic: topics[useIndex % topics.length] };
+  if (existing) return { created: false, job: input.job };
+  const state = initialState(input.job);
+  await createFeishuRecord(token, config.tableId, {
+    "\u6700\u7ec8\u6807\u9898": `\u5f85\u751f\u6210 \u00b7 ${input.topic.topic}`,
+    "\u751f\u6210\u65e5\u671f": new Date(`${input.job.job_date}T00:00:00+08:00`).getTime(),
+    "\u4efb\u52a1ID": input.job.id,
+    "\u4ea7\u54c1\u540d\u79f0": input.product.name,
+    "\u7ea7\u522b": input.product.level === "cet4" ? "\u56db\u7ea7" : "\u516d\u7ea7",
+    "\u5185\u5bb9\u6a21\u5757": input.topic.module || "\u5168\u79d1",
+    "\u5185\u5bb9\u7c7b\u578b": input.topic.content_type,
+    "\u9009\u9898": input.topic.topic,
+    ...stateFields(state),
   });
-
-  const prompts = promptSnapshot(batch) || (await getPromptSettings());
-  const offsets = buildStaggerOffsets(batch.requested_count);
-  const baseTime = Math.max(Date.now(), scheduledDate.getTime());
-  const rows = selections.map(({ product, topic }, index) => ({
-    batch_id: batch.id,
-    sequence_no: index + 1,
-    start_delay_seconds: offsets[index],
-    job_date: jobDate,
-    platform: config.platform,
-    product_id: product.id,
-    topic_id: topic.id,
-    status: "queued",
-    stage: "generate_copy",
-    attempts: 0,
-    run_after: new Date(baseTime + offsets[index] * 1000).toISOString(),
-    payload: {
-      custom_prompt: prompts.copyPrompt,
-      image_prompt: prompts.imagePrompt,
-    },
-  }));
-
-  const supabase = createSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("content_jobs")
-    .upsert(rows, {
-      onConflict: "batch_id,sequence_no",
-      ignoreDuplicates: true,
-    })
-    .select("*");
-  if (error) {
-    throw new WorkflowError(
-      `Failed to create batch jobs: ${error.message}`,
-      "JOB_CREATE_FAILED",
-      true,
-    );
-  }
-
-  const jobs = (data || []) as ContentJob[];
-  const allJobs = jobs.length === rows.length ? jobs : await jobsForBatch(batch.id);
-  await updateGenerationBatch(batch.id, {
-    created_count: allJobs.length,
-    status: "populated",
-    error_message: null,
-  });
-  return {
-    created: jobs.length > 0,
-    batch: { ...batch, created_count: allJobs.length, status: "populated" as const },
-    jobs: allJobs,
-  };
+  return { created: true, job: input.job };
 }
 
 export interface CreateJobsInput {
@@ -333,6 +157,7 @@ export interface CreateJobsInput {
   idempotencyKey?: string;
   customPrompt?: string;
   imagePrompt?: string;
+  scheduledFor?: string;
 }
 
 export async function createDailyJobs(input: CreateJobsInput = {}) {
@@ -345,27 +170,79 @@ export async function createDailyJobs(input: CreateJobsInput = {}) {
       false,
     );
   }
-
-  const savedPrompts = await getPromptSettings();
-  const prompts = {
-    copyPrompt: input.customPrompt?.trim() || savedPrompts.copyPrompt,
-    imagePrompt: input.imagePrompt?.trim() || savedPrompts.imagePrompt,
-  };
-  const jobDate =
-    input.jobDate || dateInTimeZone(new Date(), config.timezone);
   const productMode = input.productMode || "rotate";
-  const idempotencyKey =
+  const products = activeProducts({ productId: input.productId, productMode });
+  if (products.length === 0) {
+    throw new WorkflowError("No active product is configured", "NO_ACTIVE_PRODUCT", false);
+  }
+  const prompts = await getPromptSettings();
+  const scheduledDate = input.scheduledFor ? new Date(input.scheduledFor) : new Date();
+  const jobDate = input.jobDate || dateInTimeZone(scheduledDate, config.timezone);
+  const key =
     input.idempotencyKey ||
     `daily:${jobDate}:${config.platform}:${input.productId || productMode}:${count}`;
-  const batch = await createManualBatch({
-    idempotencyKey,
-    requestedCount: count,
-    productMode,
-    productId: input.productId,
-    promptSnapshot: prompts,
+  const sequence = repeatBalanced(await orderedProducts(products), count);
+  const uniqueProducts = [...new Set(sequence.map((product) => product.id))];
+  const topicEntries = await Promise.all(
+    uniqueProducts.map(async (productId) => [
+      productId,
+      await rankTopics(productId, jobDate, input.topicId),
+    ] as const),
+  );
+  const topicsByProduct = new Map(topicEntries);
+  const usage = new Map<string, number>();
+  const offsets = buildStaggerOffsets(count);
+  const baseTime = Math.max(Date.now(), scheduledDate.getTime());
+  const now = new Date().toISOString();
+  const selections = sequence.map((product, index) => {
+    const candidates = topicsByProduct.get(product.id) || [];
+    if (candidates.length === 0) {
+      throw new WorkflowError(
+        `No active topic is available for ${product.name}`,
+        "NO_ACTIVE_TOPIC",
+        false,
+      );
+    }
+    const useIndex = usage.get(product.id) || 0;
+    usage.set(product.id, useIndex + 1);
+    return { product, topic: candidates[useIndex % candidates.length], index };
   });
-  return populateGenerationBatch(batch, {
-    jobDate,
-    topicId: input.topicId,
-  });
+
+  const jobs: ContentJob[] = [];
+  let createdCount = 0;
+  for (const { product, topic, index } of selections) {
+    const jobId = deterministicId(`${key}:${index + 1}`);
+    const delay = offsets[index];
+    const job: ContentJob = {
+      id: jobId,
+      job_date: jobDate,
+      platform: config.platform,
+      product_id: product.id,
+      topic_id: topic.id,
+      status: "queued",
+      stage: "generate_copy",
+      attempts: 0,
+      max_attempts: 3,
+      run_after: new Date(baseTime + delay * 1000).toISOString(),
+      locked_at: null,
+      locked_by: null,
+      payload: {
+        custom_prompt: input.customPrompt?.trim() || prompts.copyPrompt,
+        image_prompt: input.imagePrompt?.trim() || prompts.imagePrompt,
+      },
+      error_code: null,
+      error_message: null,
+      started_at: null,
+      finished_at: null,
+      created_at: now,
+      updated_at: now,
+      batch_id: key,
+      sequence_no: index + 1,
+      start_delay_seconds: delay,
+    };
+    const result = await createJobRecord({ job, product, topic });
+    if (result.created) createdCount += 1;
+    jobs.push(job);
+  }
+  return { created: createdCount > 0, createdCount, jobs };
 }

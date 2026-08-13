@@ -76,13 +76,13 @@ export async function handleGenerateCopy(job: ContentJob) {
       postRowToContent(existing),
       imagePromptFromJob(job),
     );
-    await markTopicUsed(topic.id);
+    await markTopicUsed();
     await advanceJob(job.id, "generate_image_1");
     return;
   }
 
   const recentTopics = await getRecentTopics(product.id, job.job_date);
-  const gateway = createAiGateway(modelLogObserver(job.id));
+  const gateway = createAiGateway(modelLogObserver());
   const content = await gateway.generateJson({
     schema: GeneratedPostSchema,
     systemPrompt: POST_SYSTEM_PROMPT,
@@ -109,6 +109,6 @@ export async function handleGenerateCopy(job: ContentJob) {
     image_briefs: content.image_briefs,
   });
   await prepareAssets(post.id, product, content, imagePromptFromJob(job));
-  await markTopicUsed(topic.id);
+  await markTopicUsed();
   await advanceJob(job.id, "generate_image_1");
 }

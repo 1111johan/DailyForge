@@ -52,7 +52,6 @@ export function buildFeishuFields(input: {
       post.review_status === "needs_review"
         ? "自动检查发现问题，请发布前复核。"
         : "",
-    "Supabase ID": post.id,
   };
   return fields;
 }

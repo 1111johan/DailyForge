@@ -1,7 +1,8 @@
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 import { createAiGateway } from "@/lib/ai/gateway";
 import { getAiConfig } from "@/lib/config/env";
-import { assetStoragePath, uploadBuffer } from "@/lib/supabase/storage";
+import { getFeishuTenantToken } from "@/lib/feishu/auth";
+import { uploadImageToFeishu } from "@/lib/feishu/media";
 import type { ContentJob, GeneratedAsset, JobStage } from "@/lib/types/domain";
 import { WorkflowError } from "@/lib/workflow/errors";
 import {
@@ -22,7 +23,7 @@ async function validateImage(buffer: Buffer, expectedWidth: number, expectedHeig
       true,
     );
   }
-  let metadata: sharp.Metadata;
+  let metadata: Metadata;
   try {
     metadata = await sharp(buffer).metadata();
   } catch (error) {
@@ -71,28 +72,27 @@ async function saveReadyImage(input: {
     config.imageWidth,
     config.imageHeight,
   );
-  const path = assetStoragePath({
-    jobDate: input.job.job_date,
-    postId: input.postId,
-    assetIndex: input.asset.asset_index,
-    mimeType: metadata.mimeType,
-  });
-  const storage = await uploadBuffer({
-    path,
+  const extension = metadata.mimeType === "image/jpeg"
+    ? "jpg"
+    : metadata.mimeType.split("/")[1] || "png";
+  const token = await getFeishuTenantToken();
+  const fileToken = await uploadImageToFeishu({
+    token,
+    fileName: `dailyforge-${input.job.id}-${input.asset.asset_index}.${extension}`,
     buffer: input.buffer,
-    contentType: metadata.mimeType,
-    upsert: true,
+    mimeType: metadata.mimeType,
   });
   await updateAsset(input.asset.id, {
     status: "ready",
     provider: "openai-compatible",
     model: config.imageModel,
-    storage_bucket: storage.bucket,
-    storage_path: storage.path,
+    storage_bucket: null,
+    storage_path: null,
     mime_type: metadata.mimeType,
     width: metadata.width,
     height: metadata.height,
     byte_size: input.buffer.byteLength,
+    feishu_file_token: fileToken,
     error_message: null,
   });
   await advanceJob(input.job.id, nextStageAfterImage(input.asset.asset_index));
@@ -124,7 +124,7 @@ export async function handleGenerateImage(
     return;
   }
 
-  const gateway = createAiGateway(modelLogObserver(job.id, post.id));
+  const gateway = createAiGateway(modelLogObserver());
   const config = getAiConfig();
   const pollStage = `poll_image_${assetIndex}` as JobStage;
 

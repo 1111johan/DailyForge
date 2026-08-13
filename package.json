@@ -9,15 +9,15 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "setup:feishu": "node scripts/setup-feishu.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.55.0",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "sharp": "^0.34.0",
+    "sharp": "^0.35.3",
     "zod": "^4.0.0"
   },
   "devDependencies": {

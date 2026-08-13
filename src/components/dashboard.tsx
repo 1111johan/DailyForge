@@ -6,7 +6,6 @@ import {
   CalendarClock,
   Check,
   CircleDashed,
-  Cloud,
   Clock3,
   FileText,
   Image as ImageIcon,
@@ -44,7 +43,6 @@ interface HealthResponse {
   ok: boolean;
   time: string;
   configuration: {
-    supabase: boolean;
     ai: boolean;
     feishu: boolean;
     security: boolean;
@@ -221,7 +219,6 @@ function PipelineRail({ job }: { job: DashboardJob | null }) {
 
 function ConnectionStrip({ health }: { health: HealthResponse | null }) {
   const services = [
-    ["supabase", "数据仓库", Cloud],
     ["ai", "AI 中转站", Sparkles],
     ["feishu", "飞书", Rows3],
   ] as const;
@@ -902,7 +899,7 @@ export function Dashboard() {
       setSavedPrompts(result.data);
       setDraftPrompts(result.data);
       setIsEditingPrompts(false);
-      setNotice("提示词已保存到 Supabase");
+      setNotice("提示词已保存到飞书");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "提示词保存失败");
     } finally {

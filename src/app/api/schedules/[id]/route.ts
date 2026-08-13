@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { routeError } from "@/lib/http/route-error";
 import {
   deleteGenerationSchedule,
@@ -11,11 +10,10 @@ import { WorkflowError } from "@/lib/workflow/errors";
 type ScheduleRouteContext = { params: Promise<{ id: string }> };
 
 function scheduleId(value: string) {
-  const parsed = z.string().uuid().safeParse(value);
-  if (!parsed.success) {
+  if (!/^rec[A-Za-z0-9]+$/.test(value)) {
     throw new WorkflowError("Invalid schedule id", "INVALID_SCHEDULE_ID", false);
   }
-  return parsed.data;
+  return value;
 }
 
 export const dynamic = "force-dynamic";
