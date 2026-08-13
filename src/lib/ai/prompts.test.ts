@@ -69,8 +69,26 @@ describe("buildImagePrompt", () => {
     });
 
     expect(prompt).toContain("本次图片额外要求：\n加入大一课表和荧光笔");
+    expect(prompt).toContain("画面考试标签必须写作 CET-4");
+    expect(prompt).toContain("高饱和深蓝色");
+    expect(prompt).toContain("手工拼贴海报风");
+    expect(prompt).toContain("这是封面：超大标题必须占据视觉中心");
+    expect(prompt).toContain(`主标题（必须逐字正确）：${post.image_briefs[0].title}`);
     expect(prompt).toContain(
-      "如与尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准",
+      "如与固定视觉方向、尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准",
     );
+    expect(prompt).not.toContain("白色与浅灰底");
+    expect(prompt).not.toContain("清爽的大学生学习工作台");
+  });
+
+  it("uses collage cards for content pages without inventing copy", () => {
+    const post = GeneratedPostSchema.parse(validGeneratedPost());
+    const brief = post.image_briefs[1];
+    const prompt = buildImagePrompt({ product, post, brief });
+
+    expect(prompt).toContain("这是内容页：用一至三个拼贴学习卡片呈现已有要点");
+    expect(prompt).toContain("不得为凑数量新增文案");
+    expect(prompt).toContain(`主标题（必须逐字正确）：${brief.title}`);
+    for (const point of brief.key_points) expect(prompt).toContain(`- ${point}`);
   });
 });

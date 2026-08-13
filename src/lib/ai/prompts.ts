@@ -67,6 +67,7 @@ export function buildImagePrompt(input: {
 }) {
   const { product, post, brief, customPrompt } = input;
   const level = product.level === "cet4" ? "大学英语四级" : "大学英语六级";
+  const levelLabel = product.level === "cet4" ? "CET-4" : "CET-6";
   const prohibited = [
     ...GLOBAL_PROHIBITED_CLAIMS,
     ...stringArray(product.prohibited_claims),
@@ -77,7 +78,7 @@ export function buildImagePrompt(input: {
   return `生成一张 2:3 竖版小红书内容图，输出尺寸必须是1024×1536。
 
 产品：${product.name}
-考试：${level}
+考试：${level}（画面考试标签必须写作 ${levelLabel}）
 选题：${post.topic}
 图片序号：${brief.index}/4
 图片类型：${brief.type === "cover" ? "封面" : "内容页"}
@@ -85,14 +86,16 @@ export function buildImagePrompt(input: {
 ${brief.subtitle ? `副标题（必须逐字正确）：${brief.subtitle}` : ""}
 ${brief.key_points.length > 0 ? `要点：\n${brief.key_points.map((point) => `- ${point}`).join("\n")}` : ""}
 
-视觉方向：清爽的大学生学习工作台，白色与浅灰底，深墨色正文，红色重点标记，少量绿色进度元素；使用纸张、活页夹、文具和真实学习笔记的材质，但保持信息密度清晰。禁止米黄色复古滤镜，禁止渐变、光晕、3D文字和营销海报感。
+固定视觉方向：高饱和深蓝色黑板或海报板背景，大学生学习博主的手工拼贴海报风、手帐风和黑板报风。加入米黄色胶带纸、撕边纸、便利贴和学习卡片；主标题使用超大白色粗体粉笔字或刷字，重点词用黄色，并用红色手绘圈线、下划线或箭头强调。可以少量使用图钉、星星、勾选、灯泡和手写标注。画面要有强封面感、强视觉冲击、清晰的信息层级和值得收藏的学习干货感。
 
-排版要求：标题层级清楚，正文中文可读，不添加任何未提供的文案、品牌、考试名称或承诺。四张图保持统一视觉系统但布局不重复。
+固定排版要求：${brief.type === "cover" ? "这是封面：超大标题必须占据视觉中心，考试标签醒目，下半区用拼贴卡片概括已有要点。" : "这是内容页：用一至三个拼贴学习卡片呈现已有要点，信息足够时优先采用三个步骤或三个模块；不得为凑数量新增文案。"}标题层级清楚，中文必须准确可读。只可使用上方提供的考试标签、主题、主标题、副标题和要点，不添加其他文案、品牌、考试名称或承诺。四张图保持相同的深蓝底、字体、拼贴材质与装饰语言，但布局不重复。
+
+固定禁止项：极简性冷淡风、纯白淡雅风、普通办公PPT风、3D立体字、金属质感、渐变、光晕、写实书桌摄影、电商促销海报和过度商业广告感。
 
 ${customPrompt?.trim() ? `本次图片额外要求：
 ${customPrompt.trim()}
 
-额外要求只能调整画面风格、构图和信息呈现；如与尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准。
+额外要求只能补充构图和信息呈现；如与固定视觉方向、尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准。
 ` : ""}
 
 绝对禁止出现：${Array.from(new Set(prohibited)).join("、")}。`;

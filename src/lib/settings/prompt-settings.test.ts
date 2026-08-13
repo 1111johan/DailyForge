@@ -13,6 +13,10 @@ describe("prompt settings", () => {
     expect(DEFAULT_PROMPT_SETTINGS.copyPrompt).toContain("六级");
     expect(DEFAULT_PROMPT_SETTINGS.copyPrompt).toContain("1000");
     expect(DEFAULT_PROMPT_SETTINGS.imagePrompt).toContain("四张");
+    expect(DEFAULT_PROMPT_SETTINGS.imagePrompt).toContain("高饱和深蓝色");
+    expect(DEFAULT_PROMPT_SETTINGS.imagePrompt).toContain("手工拼贴海报风");
+    expect(DEFAULT_PROMPT_SETTINGS.imagePrompt).toContain("不得为凑数量新增文案");
+    expect(DEFAULT_PROMPT_SETTINGS.imagePrompt).not.toContain("六级阅读总是看不懂");
   });
 
   it("rejects an empty prompt", () => {
