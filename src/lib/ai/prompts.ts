@@ -92,7 +92,7 @@ ${brief.key_points.length > 0 ? `要点：\n${brief.key_points.map((point) => `-
 
 固定禁止项：极简性冷淡风、纯白淡雅风、普通办公PPT风、3D立体字、金属质感、渐变、光晕、写实书桌摄影、电商促销海报和过度商业广告感。
 
-${customPrompt?.trim() ? `本次图片额外要求：
+${customPrompt?.trim() ? `可编辑风格补充（与上方固定视觉方向重复的内容无需再次执行）：
 ${customPrompt.trim()}
 
 额外要求只能补充构图和信息呈现；如与固定视觉方向、尺寸、文字内容、考试级别或禁用规则冲突，以固定规则为准。

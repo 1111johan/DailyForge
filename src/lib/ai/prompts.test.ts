@@ -68,7 +68,7 @@ describe("buildImagePrompt", () => {
       customPrompt: "加入大一课表和荧光笔，画面保持自然。",
     });
 
-    expect(prompt).toContain("本次图片额外要求：\n加入大一课表和荧光笔");
+    expect(prompt).toContain("可编辑风格补充（与上方固定视觉方向重复的内容无需再次执行）：\n加入大一课表和荧光笔");
     expect(prompt).toContain("画面考试标签必须写作 CET-4");
     expect(prompt).toContain("高饱和深蓝色");
     expect(prompt).toContain("手工拼贴海报风");
