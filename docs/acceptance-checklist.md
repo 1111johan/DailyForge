@@ -36,10 +36,11 @@
 
 ## 在线执行
 
-- 外部定时器每分钟向 `/api/cron/tick` 发送 `POST`。
+- Supabase 中只有一条启用的 `dailyforge-online-heartbeat`，每分钟向 `/api/cron/tick` 发送 `POST`。
 - 请求包含 `Authorization: Bearer <CRON_SECRET>`。
+- Supabase Vault 中存在 `dailyforge_base_url` 和 `dailyforge_cron_secret`；验收时只检查名称，不输出值。
+- Supabase 不保存文案、图片、任务或提示词，全部业务结果仍保存在飞书。
 - 用户电脑关闭后，Vercel 日志仍出现心跳请求，飞书任务继续推进。
-- 定时器失败通知已启用。
 
 ## 本地检查
 

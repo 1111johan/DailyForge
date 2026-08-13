@@ -73,7 +73,7 @@ APP_TIMEZONE=Asia/Shanghai
 
 ## 在线自动执行
 
-部署到 Vercel 后，由外部分钟级定时器每分钟发送一次：
+部署到 Vercel 后，由现有 Supabase 项目的 `pg_cron` 每分钟发送一次心跳：
 
 ```text
 POST https://YOUR_DOMAIN/api/cron/tick
@@ -81,6 +81,8 @@ Authorization: Bearer YOUR_CRON_SECRET
 ```
 
 一次心跳会先检查到期计划，再推进一个待处理阶段。接口与飞书任务 ID 都具备幂等保护，重复请求不会重复创建同一批内容。
+
+Supabase 只负责这条在线心跳，不保存文案、图片、任务或提示词。全部业务数据仍直接保存在飞书，因此不需要 cron-job.org 或其他外部定时软件。可重复执行的配置见 [`supabase/heartbeat.sql`](supabase/heartbeat.sql)，它只引用 Vault 中的 `dailyforge_base_url` 和 `dailyforge_cron_secret`，不会把密钥写入仓库。
 
 ## 服务端接口
 
