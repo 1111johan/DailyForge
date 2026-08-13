@@ -77,6 +77,16 @@ export function getGenerationConfig() {
   };
 }
 
+export function getCleanupConfig() {
+  return {
+    retentionDays: positiveInteger(process.env.CLEANUP_RETENTION_DAYS, 3),
+    batchSize: Math.min(
+      positiveInteger(process.env.CLEANUP_BATCH_SIZE, 20),
+      100,
+    ),
+  };
+}
+
 export type SecretName = "CRON_SECRET" | "WORKER_SECRET";
 
 export function getSecret(name: SecretName) {

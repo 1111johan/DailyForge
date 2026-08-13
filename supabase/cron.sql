@@ -11,7 +11,9 @@ from cron.job
 where jobname in (
   'dailyforge-create-daily-job',
   'dailyforge-dispatch-schedules',
-  'dailyforge-run-worker'
+  'dailyforge-run-worker',
+  'dailyforge-cleanup-history',
+  'dailyforge-trim-automation-logs'
 );
 
 select cron.schedule(
@@ -41,7 +43,7 @@ select cron.schedule(
 
 select cron.schedule(
   'dailyforge-run-worker',
-  '1 second',
+  '5 seconds',
   $$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name = 'dailyforge_base_url') || '/api/worker/run',
@@ -61,5 +63,33 @@ select cron.schedule(
       job.status = 'running' and job.locked_at < now() - interval '6 minutes'
     )
   );
+  $$
+);
+
+select cron.schedule(
+  'dailyforge-cleanup-history',
+  '30 3 * * *',
+  $$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'dailyforge_base_url') || '/api/cron/cleanup',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'dailyforge_cron_secret')
+    ),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 55000
+  );
+  $$
+);
+
+select cron.schedule(
+  'dailyforge-trim-automation-logs',
+  '45 3 * * *',
+  $$
+  delete from cron.job_run_details
+  where end_time < now() - interval '24 hours';
+
+  delete from net._http_response
+  where created < now() - interval '24 hours';
   $$
 );
