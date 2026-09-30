@@ -9,4 +9,6 @@ artifacts/
 .env.*.local
 *.log
 *.tsbuildinfo
+__pycache__/
+*.pyc
 .DS_Store

@@ -118,6 +118,13 @@ const contentFields = [
   { field_name: "\u4efb\u52a1\u9636\u6bb5", type: 1 },
   { field_name: "\u4e0b\u6b21\u6267\u884c", type: 5 },
   { field_name: "\u9501\u5b9a\u65f6\u95f4", type: 5 },
+  { field_name: "\u793e\u5a92\u6570\u636e", type: 1 },
+  { field_name: "\u5c0f\u7ea2\u4e66\u8349\u7a3f\u72b6\u6001", type: 1 },
+  { field_name: "\u6296\u97f3\u8349\u7a3f\u72b6\u6001", type: 1 },
+  { field_name: "\u793e\u5a92\u9501\u5b9a\u8bbe\u5907", type: 1 },
+  { field_name: "\u793e\u5a92\u9501\u5b9a\u65f6\u95f4", type: 5 },
+  { field_name: "\u793e\u5a92\u66f4\u65b0\u65f6\u95f4", type: 5 },
+  { field_name: "\u793e\u5a92\u9519\u8bef", type: 1 },
 ];
 const scheduleFields = [
   { field_name: "\u8ba1\u5212\u540d\u79f0", type: 1 },
@@ -134,6 +141,18 @@ const settingsFields = [
   { field_name: "\u6587\u6848\u63d0\u793a\u8bcd", type: 1 },
   { field_name: "\u56fe\u7247\u63d0\u793a\u8bcd", type: 1 },
 ];
+const deviceFields = [
+  { field_name: "\u8bbe\u5907\u540d\u79f0", type: 1 },
+  { field_name: "\u8bbe\u5907ID", type: 1 },
+  { field_name: "\u8fde\u63a5\u7801\u54c8\u5e0c", type: 1 },
+  { field_name: "\u8fde\u63a5\u7801\u8fc7\u671f", type: 5 },
+  { field_name: "\u51ed\u8bc1\u54c8\u5e0c", type: 1 },
+  { field_name: "\u662f\u5426\u542f\u7528", type: 7 },
+  { field_name: "\u662f\u5426\u6267\u884c\u8bbe\u5907", type: 7 },
+  { field_name: "\u6700\u8fd1\u5728\u7ebf", type: 5 },
+  { field_name: "\u6700\u8fd1\u9519\u8bef", type: 1 },
+  { field_name: "\u521b\u5efa\u65f6\u95f4", type: 5 },
+];
 
 for (const field of contentFields) {
   await ensureField(env.FEISHU_TABLE_ID, field);
@@ -146,11 +165,16 @@ const settingsTableId = await ensureTable(
   "DailyForge \u7cfb\u7edf\u8bbe\u7f6e",
   settingsFields,
 );
+const deviceTableId = await ensureTable(
+  "DailyForge \u8fd0\u8425\u8bbe\u5907",
+  deviceFields,
+);
 
 process.stdout.write(
   `${JSON.stringify({
     contentTableId: env.FEISHU_TABLE_ID,
     scheduleTableId,
     settingsTableId,
+    deviceTableId,
   })}\n`,
 );

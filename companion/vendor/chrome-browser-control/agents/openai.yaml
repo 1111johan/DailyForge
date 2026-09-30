@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chrome Browser Control"
+  short_description: "Control an existing Chrome, including scoped image uploads"
+  default_prompt: "Use $chrome-browser-control to inspect and operate my existing ordinary Google Chrome safely, including image uploads from configured roots when requested."

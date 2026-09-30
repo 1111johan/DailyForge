@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DailyForge 本机助手</title>
+    <style>
+      :root { color-scheme: light; --ink:#17211b; --soft:#58645e; --line:#d9e0dc; --green:#1f6b4f; --green2:#e4f0e9; --red:#c34b3f; --canvas:#f3f6f4; }
+      * { box-sizing:border-box; }
+      body { margin:0; min-height:100vh; color:var(--ink); background:linear-gradient(90deg,#17211b0a 1px,transparent 1px),linear-gradient(#17211b0a 1px,transparent 1px),var(--canvas); background-size:32px 32px; font-family:"Microsoft YaHei UI","PingFang SC",sans-serif; }
+      button,input { font:inherit; }
+      button { cursor:pointer; }
+      main { width:min(940px,calc(100% - 32px)); margin:32px auto; border:1px solid var(--line); border-top:5px solid var(--green); background:white; box-shadow:14px 14px 0 #dfe7e2; }
+      header { padding:30px 34px; display:flex; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+      header p,.eyebrow { margin:0 0 7px; color:var(--red); font:700 10px/1 Consolas,monospace; letter-spacing:.08em; }
+      h1,h2 { margin:0; }
+      h1 { font-size:30px; }
+      h2 { font-size:17px; }
+      header span,.step-copy span { color:var(--soft); font-size:12px; }
+      .state { min-width:132px; padding:12px 14px; align-self:center; color:var(--soft); background:var(--canvas); font-size:12px; }
+      .state.good { color:var(--green); background:var(--green2); }
+      .steps { padding:0 34px 34px; }
+      .step { display:grid; grid-template-columns:44px minmax(0,1fr); gap:16px; padding:26px 0; border-bottom:1px solid var(--line); }
+      .step:last-child { border-bottom:0; }
+      .number { width:38px; height:38px; display:grid; place-items:center; color:white; background:var(--ink); font:700 13px/1 Consolas,monospace; }
+      .step-copy > span { display:block; margin-top:6px; }
+      form { margin-top:16px; display:grid; grid-template-columns:1.2fr 1fr 1fr auto; gap:8px; }
+      input { min-width:0; height:44px; padding:0 11px; border:1px solid var(--line); background:#fafcfb; }
+      button { min-height:44px; padding:0 16px; border:1px solid var(--line); color:var(--ink); background:white; font-weight:650; }
+      button.primary { color:white; border-color:var(--green); background:var(--green); }
+      .status-grid { margin-top:16px; display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--line); }
+      .status-item { min-height:84px; padding:14px; border-right:1px solid var(--line); }
+      .status-item:last-child { border-right:0; }
+      .status-item span { display:block; color:var(--soft); font-size:10px; }
+      .status-item strong { display:block; margin-top:9px; font-size:13px; }
+      .status-item.good strong { color:var(--green); }
+      .actions { margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; }
+      .extension-help { display:none; margin-top:14px; padding:14px; border:1px dashed var(--green); background:var(--green2); }
+      .extension-help strong,.extension-help code { display:block; }
+      .extension-help code { margin:8px 0; padding:8px; overflow-wrap:anywhere; color:var(--green); background:white; font:12px/1.5 Consolas,monospace; }
+      .extension-help ol { margin:8px 0 0; padding-left:20px; color:var(--soft); font-size:12px; line-height:1.8; }
+      .notice { display:none; margin:0 34px 24px; padding:13px 15px; color:var(--green); border-left:3px solid var(--green); background:var(--green2); font-size:12px; }
+      .notice.error { color:var(--red); border-color:var(--red); background:#f8e9e7; }
+      @media(max-width:720px){ header{flex-direction:column}.steps{padding-inline:20px}form{grid-template-columns:1fr}.status-grid{grid-template-columns:1fr 1fr}.status-item:nth-child(2){border-right:0}.status-item:nth-child(-n+2){border-bottom:1px solid var(--line)}main{margin:16px auto} }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><p>DAILYFORGE / LOCAL COMPANION</p><h1>本机草稿助手</h1><span>完成一次连接后，系统会在这台电脑上准备小红书和抖音内容。</span></div>
+        <div class="state" id="overall">正在检查</div>
+      </header>
+      <div class="steps">
+        <section class="step">
+          <div class="number">01</div>
+          <div class="step-copy"><p class="eyebrow">CONNECT</p><h2>连接 DailyForge</h2><span>向管理员获取一次性连接码，不需要填写飞书或 AI 密钥。</span>
+            <form id="pair-form"><input id="base-url" value="https://daily-forge-iota.vercel.app" aria-label="DailyForge 地址" /><input id="device-name" placeholder="这台电脑的名称" aria-label="设备名称" /><input id="pair-code" placeholder="一次性连接码" aria-label="连接码" /><button class="primary" type="submit">完成连接</button></form>
+          </div>
+        </section>
+        <section class="step">
+          <div class="number">02</div>
+          <div class="step-copy"><p class="eyebrow">CHROME</p><h2>检查浏览器助手</h2><span>首次使用仍需在 Chrome 中确认扩展权限并登录两个平台。</span>
+            <div class="status-grid"><div class="status-item" id="cloud"><span>DailyForge</span><strong>未连接</strong></div><div class="status-item" id="bridge"><span>Chrome 助手</span><strong>未连接</strong></div><div class="status-item" id="xhs"><span>小红书</span><strong>未打开</strong></div><div class="status-item" id="douyin"><span>抖音</span><strong>未打开</strong></div></div>
+            <div class="actions"><button id="prepare" type="button">准备浏览器助手</button><button id="enroll" type="button">完成扩展配对</button><button id="open-platforms" type="button">打开小红书和抖音</button><button id="refresh" type="button">重新检查</button></div>
+            <div class="extension-help" id="extension-help"><strong>首次使用只做一次</strong><code id="extension-path"></code><button id="copy-extension-path" type="button">复制扩展目录</button><ol><li>在 Chrome 地址栏打开 chrome://extensions</li><li>打开右上角“开发者模式”</li><li>点“加载已解压的扩展程序”，选择上面的目录</li><li>回到这里点“完成扩展配对”</li></ol></div>
+          </div>
+        </section>
+        <section class="step">
+          <div class="number">03</div>
+          <div class="step-copy"><p class="eyebrow">DRY RUN</p><h2>建立一条测试内容</h2><span>系统只上传图片和填写文案，不会自动点击最终发布。</span><div class="actions"><button class="primary" id="run" type="button">准备下一条内容</button></div></div>
+        </section>
+      </div>
+      <div class="notice" id="notice" role="status"></div>
+    </main>
+    <script>
+      const notice = document.querySelector('#notice');
+      let extensionPath='';
+      function show(message,error=false){notice.textContent=message;notice.className='notice'+(error?' error':'');notice.style.display='block'}
+      async function api(path,options){const response=await fetch(path,options);const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'操作未完成');return result.data}
+      function state(id,label,good){const node=document.querySelector(id);node.querySelector('strong').textContent=label;node.classList.toggle('good',good)}
+      function showExtension(path){if(!path)return;extensionPath=path;document.querySelector('#extension-path').textContent=path;document.querySelector('#extension-help').style.display='block'}
+      async function refresh(){try{const data=await api('/api/status');showExtension(data.chrome?.extensionPath);state('#cloud',data.cloud?'已连接':data.cloudError||'未连接',!!data.cloud);state('#bridge',data.chrome?.serverReachable?'可以使用':data.chromeError||'未连接',!!data.chrome?.serverReachable);state('#xhs',data.chrome?.xiaohongshu?'页面已打开':'需要登录',!!data.chrome?.xiaohongshu);state('#douyin',data.chrome?.douyin?'页面已打开':'需要登录',!!data.chrome?.douyin);document.querySelector('#overall').textContent=data.cloud&&data.chrome?.serverReachable?'可以开始':'需要完成设置';document.querySelector('#overall').classList.toggle('good',!!(data.cloud&&data.chrome?.serverReachable))}catch(error){show(error.message,true)}}
+      document.querySelector('#pair-form').addEventListener('submit',async event=>{event.preventDefault();try{await api('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseUrl:document.querySelector('#base-url').value,name:document.querySelector('#device-name').value,code:document.querySelector('#pair-code').value})});show('这台电脑已经连接 DailyForge');await refresh()}catch(error){show(error.message,true)}});
+      document.querySelector('#prepare').onclick=async()=>{try{const data=await api('/api/prepare',{method:'POST'});showExtension(data.extensionPath);show('浏览器助手文件已准备好，请按页面说明加载 Chrome 扩展');await refresh()}catch(error){show(error.message,true)}};
+      document.querySelector('#enroll').onclick=async()=>{try{await api('/api/enroll',{method:'POST'});show('Chrome 扩展已经配对完成');await refresh()}catch(error){show('请先在 Chrome 加载扩展，再重新点击配对：'+error.message,true)}};
+      document.querySelector('#copy-extension-path').onclick=async()=>{try{await navigator.clipboard.writeText(extensionPath);show('扩展目录已复制')}catch(error){show('无法自动复制，请手动选择上方目录',true)}};
+      document.querySelector('#open-platforms').onclick=async()=>{try{await api('/api/open-platforms',{method:'POST'});show('请在 Chrome 中完成两个平台登录');setTimeout(refresh,2500)}catch(error){show(error.message,true)}};
+      document.querySelector('#refresh').onclick=refresh;
+      document.querySelector('#run').onclick=async()=>{try{const data=await api('/api/run',{method:'POST'});show(data.message||'内容已经填入平台页面，请检查后手动发布');await refresh()}catch(error){show(error.message,true)}};
+      refresh();
+    </script>
+  </body>
+</html>

@@ -6,11 +6,13 @@ import {
 } from "@/lib/scheduling/repository";
 import { ScheduleInputSchema } from "@/lib/scheduling/schedule-schema";
 import { WorkflowError } from "@/lib/workflow/errors";
+import { assertAdminRequest } from "@/lib/security/admin-session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    assertAdminRequest(request);
     return NextResponse.json({
       ok: true,
       data: await listGenerationSchedules(),
@@ -22,6 +24,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertAdminRequest(request);
     const parsed = ScheduleInputSchema.safeParse(await request.json());
     if (!parsed.success) {
       throw new WorkflowError(

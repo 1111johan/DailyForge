@@ -4,6 +4,7 @@ import { routeError } from "@/lib/http/route-error";
 import { ProductModeSchema } from "@/lib/scheduling/schedule-schema";
 import { createDailyJobs } from "@/lib/workflow/create-job";
 import { WorkflowError } from "@/lib/workflow/errors";
+import { assertAdminRequest } from "@/lib/security/admin-session";
 
 const ManualGenerateSchema = z
   .object({
@@ -24,6 +25,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    assertAdminRequest(request);
     const parsed = ManualGenerateSchema.safeParse(await request.json());
     if (!parsed.success) {
       throw new WorkflowError(

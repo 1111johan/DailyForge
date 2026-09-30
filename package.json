@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup:feishu": "node scripts/setup-feishu.mjs"
+    "setup:feishu": "node scripts/setup-feishu.mjs",
+    "package:companion": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-companion-package.ps1"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

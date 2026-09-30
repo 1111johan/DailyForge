@@ -1,0 +1,304 @@
+{
+  "version": 4,
+  "mutating_actions": [
+    "open_url",
+    "switch_page",
+    "close_page",
+    "switch_window",
+    "close_window",
+    "navigate",
+    "click_ref",
+    "highlight_ref",
+    "input",
+    "type_text",
+    "clear",
+    "focus",
+    "check",
+    "drag_and_drop",
+    "click",
+    "hover",
+    "hover_text",
+    "click_text",
+    "highlight",
+    "scroll",
+    "press_key",
+    "select",
+    "dblclick",
+    "contextmenu",
+    "upload_file"
+  ],
+  "actions": {
+    "state": { "command": "get_state", "client_method": "state", "params": {} },
+    "open_url": {
+      "command": "open_url", "client_method": "open_url",
+      "params": {
+        "url": { "type": "string", "default": "" },
+        "openMode": { "type": "string", "default": "new_tab" },
+        "timeoutMs": { "type": "int", "default": 20000 },
+        "operationId": { "type": "string", "default": "" }
+      }
+    },
+    "list_pages": { "command": "list_pages", "client_method": "list_pages", "params": {} },
+    "switch_page": {
+      "command": "switch_page", "client_method": "switch_page",
+      "params": {
+        "pageId": { "type": "string", "default": "" },
+        "tabId": { "type": "int", "default": -1 }
+      }
+    },
+    "close_page": {
+      "command": "close_page", "client_method": "close_page",
+      "params": {
+        "pageId": { "type": "string", "default": "" },
+        "tabId": { "type": "int", "default": -1 }
+      }
+    },
+    "list_windows": { "command": "list_windows", "client_method": "list_windows", "params": {} },
+    "switch_window": {
+      "command": "switch_window", "client_method": "switch_window",
+      "params": { "windowId": { "type": "int", "default": -1 } }
+    },
+    "close_window": {
+      "command": "close_window", "client_method": "close_window",
+      "params": { "windowId": { "type": "int", "default": -1 } }
+    },
+    "navigate": {
+      "command": "navigate", "client_method": "navigate",
+      "params": { "navigationAction": { "type": "string", "default": "reload" } }
+    },
+    "scan": {
+      "command": "scan_elements", "client_method": "scan_elements",
+      "params": {
+        "maxTop": { "type": "int", "default": 900 },
+        "offsetTop": { "type": "int", "default": 0 },
+        "segmentHeight": { "type": "int", "default": 0 },
+        "limit": { "type": "int", "default": 80 },
+        "allFrames": { "type": "bool", "default": false },
+        "includeShadow": { "type": "bool", "default": true }
+      }
+    },
+    "find": {
+      "command": "find_elements", "client_method": "find_elements",
+      "params": {
+        "text": { "type": "string", "default": "" },
+        "exact": { "type": "bool", "default": false },
+        "role": { "type": "string", "default": "" },
+        "tag": { "type": "string", "default": "" },
+        "attr": { "type": "object", "default": {} },
+        "limit": { "type": "int", "default": 10 },
+        "allFrames": { "type": "bool", "default": false },
+        "includeShadow": { "type": "bool", "default": true }
+      }
+    },
+    "extract": {
+      "command": "extract_elements", "client_method": "extract_elements",
+      "params": {
+        "css": { "type": "string", "default": "" },
+        "fields": { "type": "json", "default": ["visibleText", "href", "title", "ariaLabel"] },
+        "limit": { "type": "int", "default": 100 },
+        "includeHidden": { "type": "bool", "default": false },
+        "allFrames": { "type": "bool", "default": false },
+        "includeShadow": { "type": "bool", "default": true }
+      }
+    },
+    "snapshot": {
+      "command": "snapshot", "client_method": "snapshot",
+      "params": {
+        "scope": { "type": "string", "default": "viewport" },
+        "within": { "type": "string", "default": "" },
+        "limit": { "type": "int", "default": 120 }
+      }
+    },
+    "inspect_point": {
+      "command": "inspect_point", "client_method": "inspect_point",
+      "params": {
+        "x": { "type": "int", "default": 0 },
+        "y": { "type": "int", "default": 0 }
+      }
+    },
+    "click_ref": {
+      "command": "click_ref", "client_method": "click_ref",
+      "params": {
+        "ref": { "type": "string", "default": "" },
+        "snapshot_id": { "type": "string", "default": "" }
+      }
+    },
+    "highlight_ref": {
+      "command": "highlight_ref", "client_method": "highlight_ref",
+      "params": {
+        "ref": { "type": "string", "default": "" },
+        "snapshot_id": { "type": "string", "default": "" },
+        "duration": { "type": "int", "default": 1600 }
+      }
+    },
+    "screenshot": { "command": "screenshot", "client_method": "screenshot", "params": {} },
+    "input": {
+      "command": "input_selector", "client_method": "input_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "text": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "type_text": {
+      "command": "type_text", "client_method": "type_text",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "text": { "type": "string", "default": "" },
+        "delayMs": { "type": "int", "default": 40 },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "clear": {
+      "command": "clear_selector", "client_method": "clear_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "focus": {
+      "command": "focus_selector", "client_method": "focus_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "check": {
+      "command": "check_selector", "client_method": "check_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "checked": { "type": "bool", "default": true },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "drag_and_drop": {
+      "command": "drag_and_drop", "client_method": "drag_and_drop",
+      "params": {
+        "sourceSelector": { "type": "string", "default": "" },
+        "targetSelector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] },
+        "sourceShadowPath": { "type": "json", "default": [] },
+        "targetShadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "click": {
+      "command": "click_selector", "client_method": "click_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "hover": {
+      "command": "hover_selector", "client_method": "hover_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "hover_text": {
+      "command": "hover_text", "client_method": "hover_text",
+      "params": {
+        "text": { "type": "string", "default": "" },
+        "selector": { "type": "string", "default": "" },
+        "exact": { "type": "bool", "default": true }
+      }
+    },
+    "click_text": {
+      "command": "click_text", "client_method": "click_text",
+      "params": {
+        "text": { "type": "string", "default": "" },
+        "selector": { "type": "string", "default": "" },
+        "exact": { "type": "bool", "default": true }
+      }
+    },
+    "highlight": {
+      "command": "highlight_selector", "client_method": "highlight_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "duration": { "type": "int", "default": 1600 },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "wait_selector": {
+      "command": "wait_selector", "client_method": "wait_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "state": { "type": "string", "default": "visible" },
+        "timeoutMs": { "type": "int", "default": 10000 },
+        "pollMs": { "type": "int", "default": 100 },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "scroll": {
+      "command": "scroll", "client_method": "scroll",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "x": { "type": "int", "default": 0 },
+        "y": { "type": "int", "default": 0 },
+        "behavior": { "type": "string", "default": "auto" },
+        "block": { "type": "string", "default": "center" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "press_key": {
+      "command": "press_key", "client_method": "press_key",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "key": { "type": "string", "default": "" },
+        "code": { "type": "string", "default": "" },
+        "ctrl": { "type": "bool", "default": false },
+        "alt": { "type": "bool", "default": false },
+        "shift": { "type": "bool", "default": false },
+        "meta": { "type": "bool", "default": false },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "select": {
+      "command": "select_option", "client_method": "select_option",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "value": { "type": "string", "default": "" },
+        "label": { "type": "string", "default": "" },
+        "index": { "type": "int", "default": -1 },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "dblclick": {
+      "command": "double_click_selector", "client_method": "double_click_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "contextmenu": {
+      "command": "context_menu_selector", "client_method": "context_menu_selector",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "frameId": { "type": "int", "default": 0 },
+        "shadowPath": { "type": "json", "default": [] }
+      }
+    },
+    "upload_file": {
+      "command": "upload_file", "client_method": "upload_file",
+      "params": {
+        "selector": { "type": "string", "default": "" },
+        "filePaths": { "type": "json", "default": [] },
+        "multiple": { "type": "bool", "default": false }
+      }
+    }
+  }
+}

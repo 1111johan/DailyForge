@@ -51,6 +51,7 @@ export function getFeishuConfig() {
     "FEISHU_TABLE_ID",
     "FEISHU_SCHEDULE_TABLE_ID",
     "FEISHU_SETTINGS_TABLE_ID",
+    "FEISHU_DEVICE_TABLE_ID",
   ]);
 
   return {
@@ -60,6 +61,7 @@ export function getFeishuConfig() {
     tableId: process.env.FEISHU_TABLE_ID!,
     scheduleTableId: process.env.FEISHU_SCHEDULE_TABLE_ID!,
     settingsTableId: process.env.FEISHU_SETTINGS_TABLE_ID!,
+    deviceTableId: process.env.FEISHU_DEVICE_TABLE_ID!,
   };
 }
 
@@ -72,7 +74,7 @@ export function getGenerationConfig() {
   };
 }
 
-export type SecretName = "CRON_SECRET" | "WORKER_SECRET";
+export type SecretName = "CRON_SECRET" | "WORKER_SECRET" | "ADMIN_ACCESS_KEY";
 
 export function getSecret(name: SecretName) {
   required([name]);
@@ -97,7 +99,8 @@ export function getConfigurationStatus() {
       "FEISHU_TABLE_ID",
       "FEISHU_SCHEDULE_TABLE_ID",
       "FEISHU_SETTINGS_TABLE_ID",
+      "FEISHU_DEVICE_TABLE_ID",
     ]),
-    security: hasAll(["CRON_SECRET", "WORKER_SECRET"]),
+    security: hasAll(["CRON_SECRET", "WORKER_SECRET", "ADMIN_ACCESS_KEY"]),
   };
 }

@@ -6,6 +6,7 @@ import {
 } from "@/lib/scheduling/repository";
 import { SchedulePatchSchema } from "@/lib/scheduling/schedule-schema";
 import { WorkflowError } from "@/lib/workflow/errors";
+import { assertAdminRequest } from "@/lib/security/admin-session";
 
 type ScheduleRouteContext = { params: Promise<{ id: string }> };
 
@@ -23,6 +24,7 @@ export async function PATCH(
   context: ScheduleRouteContext,
 ) {
   try {
+    assertAdminRequest(request);
     const { id } = await context.params;
     const parsed = SchedulePatchSchema.safeParse(await request.json());
     if (!parsed.success) {
@@ -42,10 +44,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: ScheduleRouteContext,
 ) {
   try {
+    assertAdminRequest(request);
     const { id } = await context.params;
     await deleteGenerationSchedule(scheduleId(id));
     return NextResponse.json({ ok: true });

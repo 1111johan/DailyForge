@@ -1,0 +1,7 @@
+.env*
+artifacts/
+companion/
+docs/
+supabase/
+SUPABASE_INDEX_RECOMMENDATIONS.md
+({alt

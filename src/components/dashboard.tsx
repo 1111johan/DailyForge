@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
   LoaderCircle,
+  LogOut,
   LockKeyhole,
   Pencil,
   Play,
@@ -38,6 +39,7 @@ import type {
   DashboardSnapshot,
 } from "@/lib/dashboard/data";
 import type { PromptSettings } from "@/lib/settings/prompt-settings-schema";
+import { DevicePanel } from "@/components/device-panel";
 
 interface HealthResponse {
   ok: boolean;
@@ -981,6 +983,18 @@ export function Dashboard() {
           >
             <RefreshCw className={isPending ? "spin" : ""} aria-hidden="true" />
           </button>
+          <button
+            className="icon-button"
+            type="button"
+            title="退出运行台"
+            aria-label="退出运行台"
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST" });
+              window.location.reload();
+            }}
+          >
+            <LogOut aria-hidden="true" />
+          </button>
         </div>
       </header>
       <PipelineRail job={primaryJob} />
@@ -1045,6 +1059,8 @@ export function Dashboard() {
         }}
         onSave={savePrompts}
       />
+
+      <DevicePanel />
 
       <section className="operations-bar" aria-label="任务操作">
         <div className="section-title">

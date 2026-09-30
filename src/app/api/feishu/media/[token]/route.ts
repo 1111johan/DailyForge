@@ -2,13 +2,15 @@ import { NextResponse } from "next/server";
 import { getFeishuTenantToken } from "@/lib/feishu/auth";
 import { routeError } from "@/lib/http/route-error";
 import { WorkflowError } from "@/lib/workflow/errors";
+import { assertAdminRequest } from "@/lib/security/admin-session";
 
 type MediaRouteContext = { params: Promise<{ token: string }> };
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, context: MediaRouteContext) {
+export async function GET(request: Request, context: MediaRouteContext) {
   try {
+    assertAdminRequest(request);
     const { token: fileToken } = await context.params;
     if (!fileToken || fileToken.length > 200) {
       throw new WorkflowError("Invalid file token", "INVALID_FILE_TOKEN", false);
