@@ -687,7 +687,25 @@
   }
 
   function elementValue(el) {
-    return el.isContentEditable ? String(el.textContent || "") : String(el.value ?? "");
+    if (el.isContentEditable) {
+      return String(typeof el.innerText === "string" ? el.innerText : el.textContent || "");
+    }
+    return String(el.value ?? "");
+  }
+
+  function normalizedEditableText(value) {
+    return String(value ?? "")
+      .normalize("NFC")
+      .replace(/\r\n?/g, "\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/[\u200b-\u200d\ufeff]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function elementValueMatches(el, value, expected) {
+    if (!el.isContentEditable) return value === expected;
+    return normalizedEditableText(value) === normalizedEditableText(expected);
   }
 
   function assertSafeInputElement(el) {
@@ -725,7 +743,9 @@
         await settleElementPaint();
         const value = elementValue(el);
         if (!visibleRect(el)) throw new Error(`element_not_visible: ${params.selector}`);
-        if (value !== text) throw new Error(`input_value_mismatch: ${params.selector}`);
+        if (!elementValueMatches(el, value, text)) {
+          throw new Error(`input_value_mismatch: ${params.selector}`);
+        }
         return {
           input: {
             ...elementSummary(el, 0, root, params.shadowPath),
@@ -747,7 +767,9 @@
     await settleElementPaint();
     const value = elementValue(el);
     if (!visibleRect(el)) throw new Error(`element_not_visible: ${params.selector}`);
-    if (value !== text) throw new Error(`input_value_mismatch: ${params.selector}`);
+    if (!elementValueMatches(el, value, text)) {
+      throw new Error(`input_value_mismatch: ${params.selector}`);
+    }
     return {
       input: {
         ...elementSummary(el, 0, root, params.shadowPath),

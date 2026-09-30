@@ -174,15 +174,46 @@ async function pairDevice({ baseUrl, code, name }) {
 }
 
 async function runJson(command, args, options = {}) {
-  const result = await execFileAsync(command, args, {
-    encoding: "utf8",
-    windowsHide: true,
-    maxBuffer: 10 * 1024 * 1024,
-    ...options,
-  });
+  let result;
+  try {
+    result = await execFileAsync(command, args, {
+      encoding: "utf8",
+      windowsHide: true,
+      maxBuffer: 10 * 1024 * 1024,
+      ...options,
+    });
+  } catch (error) {
+    const stdout = typeof error?.stdout === "string" ? error.stdout.trim() : "";
+    if (stdout) {
+      try {
+        const parsed = JSON.parse(stdout);
+        const commandError = new Error(
+          parsed.error || `${basename(command)} 执行失败`,
+        );
+        commandError.code = parsed.error_code || "command_failed";
+        commandError.details = parsed.details;
+        throw commandError;
+      } catch (parseError) {
+        if (parseError?.code) throw parseError;
+      }
+    }
+    throw error;
+  }
   const parsed = JSON.parse(result.stdout);
-  if (!parsed.ok) throw new Error(parsed.error || `${basename(command)} 执行失败`);
+  if (!parsed.ok) {
+    const error = new Error(parsed.error || `${basename(command)} 执行失败`);
+    error.code = parsed.error_code || "command_failed";
+    error.details = parsed.details;
+    throw error;
+  }
   return parsed;
+}
+
+function hasUnknownMutationOutcome(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "");
+  return ["unknown_outcome", "bridge_client_stale", "input_value_mismatch"].includes(code) ||
+    /unknown_outcome|bridge_client_stale|input_value_mismatch/.test(message);
 }
 
 function setupScript() {
@@ -306,6 +337,7 @@ async function clickDraftText(pageId, texts, selector = "") {
         "10",
       ], pageId);
     } catch (error) {
+      if (hasUnknownMutationOutcome(error)) throw error;
       lastError = error;
     }
   }
@@ -370,6 +402,7 @@ async function fillWithFallback(pageId, selectors, text) {
       await browser(["fill", "--css", selector, "--text", text], pageId);
       return selector;
     } catch (error) {
+      if (hasUnknownMutationOutcome(error)) throw error;
       lastError = error;
     }
   }
@@ -390,15 +423,32 @@ async function uploadWithFallback(pageId, selectors, files) {
       ], pageId);
       return selector;
     } catch (error) {
+      if (hasUnknownMutationOutcome(error)) throw error;
       lastError = error;
     }
   }
   throw lastError || new Error("未找到图片上传位置");
 }
 
+async function selectImagePublishMode(pageId, text) {
+  await browser([
+    "click-text",
+    "--text",
+    text,
+    "--contains",
+    "--timeout",
+    "10",
+  ], pageId);
+  // Both platforms keep their image file input visually hidden. The upload
+  // bridge can target it directly, while a DOM visibility wait cannot.
+  await sleep(1500);
+}
+
 async function prepareXiaohongshu(candidate, files) {
   const pageId = await openPage("https://creator.xiaohongshu.com/publish/publish");
+  await selectImagePublishMode(pageId, "上传图文");
   await uploadWithFallback(pageId, [
+    'input[type="file"][multiple]',
     'input[type="file"][accept*="image"]',
     'input[type="file"]',
   ], files);
@@ -421,7 +471,9 @@ async function prepareXiaohongshu(candidate, files) {
 
 async function prepareDouyin(candidate, files) {
   const pageId = await openPage("https://creator.douyin.com/creator-micro/content/upload");
+  await selectImagePublishMode(pageId, "发布图文");
   await uploadWithFallback(pageId, [
+    'input[type="file"][multiple]',
     'input[type="file"][accept*="image"]',
     'input[type="file"]',
   ], files);
